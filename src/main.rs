@@ -1,13 +1,18 @@
 extern crate clap;
 extern crate hyper;
 extern crate url;
+extern crate futures;
+extern crate tokio_core;
 
 use clap::{Arg, ArgMatches, App};
-use hyper::{Method, Request, Uri};
+use hyper::{Client, Method, Request, Uri};
 use hyper::header::Authorization;
 use hyper::header;
 use std::str::FromStr;
 use url::{Url};
+use tokio_core::reactor::Core;
+use futures::{Future, Stream};
+use std::io::{self, Write};
 
 fn main() {
     match ClientConfig::from_cli_args() {
@@ -21,12 +26,30 @@ fn main() {
     };
 }
 
-fn make_test_request(config: &ClientConfig) -> () {
+fn make_test_request(config: &ClientConfig) {
     let uri = config.api_uri(&["x", "projects"]);
 
     let mut req = Request::new(Method::Get, uri);
     config.auth_info.apply_to(&mut req);
     println!("Request:\n{:?}", req);
+
+    let mut core = Core::new()
+        .expect("Failed to create an event loop for making HTTP requests");
+    let client = Client::new(&core.handle());
+
+    let work = client.request(req).and_then(|res| {
+        println!("Response: {}", res.status());
+
+        res.body().for_each(|chunk| {
+            io::stdout()
+                .write_all(&chunk)
+                .map(|_| ())
+                .map_err(From::from)
+        })
+    });
+
+    core.run(work)
+        .expect("Failed to make request");
 }
 
 /// Connection information for Code Dx.
