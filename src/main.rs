@@ -3,6 +3,11 @@ extern crate hyper;
 extern crate url;
 extern crate futures;
 extern crate tokio_core;
+extern crate serde;
+extern crate serde_json;
+
+#[macro_use]
+extern crate serde_derive;
 
 use clap::{Arg, ArgMatches, App};
 use hyper::{Client, Method, Request, Uri};
@@ -12,7 +17,6 @@ use std::str::FromStr;
 use url::{Url};
 use tokio_core::reactor::Core;
 use futures::{Future, Stream};
-use std::io::{self, Write};
 
 fn main() {
     match ClientConfig::from_cli_args() {
@@ -26,6 +30,14 @@ fn main() {
     };
 }
 
+#[derive(Deserialize, Debug)]
+struct ApiProject {
+    id: u32,
+    name: String,
+    #[serde(rename = "parentId")]
+    parent_id: Option<u32>
+}
+
 fn make_test_request(config: &ClientConfig) {
     let uri = config.api_uri(&["x", "projects"]);
 
@@ -35,17 +47,34 @@ fn make_test_request(config: &ClientConfig) {
 
     let mut core = Core::new()
         .expect("Failed to create an event loop for making HTTP requests");
-    let client = Client::new(&core.handle());
+    let client: Client<hyper::client::HttpConnector, hyper::Body> = Client::new(&core.handle());
 
     let work = client.request(req).and_then(|res| {
-        println!("Response: {}", res.status());
+        println!("Response Status: {}", res.status());
+        res.body()
+            .fold(Vec::new(), |mut acc, chunk| {
+                acc.extend_from_slice(&*chunk);
+                futures::future::ok::<_, hyper::Error>(acc)
+            })
+            .map(|body| {
+                let des: Vec<ApiProject> = serde_json::from_slice(&body).unwrap();
+                for project in des {
+                    println!("{:?}", project);
+                }
+            })
 
-        res.body().for_each(|chunk| {
-            io::stdout()
-                .write_all(&chunk)
-                .map(|_| ())
-                .map_err(From::from)
-        })
+
+//        let foo = res.body().concat().and_then(|body| {
+//
+//        });
+//        let x = serde_json::from_reader(res.body());
+//        println!("JSON: {:?}", x);
+//        res.body().for_each(|chunk| {
+//            io::stdout()
+//                .write_all(&chunk)
+//                .map(|_| ())
+//                .map_err(From::from)
+//        })
     });
 
     core.run(work)
