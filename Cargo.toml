@@ -1,0 +1,11 @@
+[package]
+name = "codedx-client"
+version = "0.1.0"
+authors = ["Dylan Halperin <dylan@dylemma.io>"]
+
+[dependencies]
+rand = "0.3.16"
+clap = "2.26.2"
+hyper = "0.11"
+futures = "0.1"
+tokio-core = "0.1"
