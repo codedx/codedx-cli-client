@@ -1,24 +1,58 @@
 extern crate clap;
 extern crate hyper;
+extern crate url;
 
 use clap::{Arg, ArgMatches, App};
-use hyper::Uri;
+use hyper::{Method, Request, Uri};
+use hyper::header::Authorization;
+use hyper::header;
 use std::str::FromStr;
+use url::{Url};
 
 fn main() {
     match ClientConfig::from_cli_args() {
-        Ok(config) => println!("arguments are good: {:?}", config),
+        Ok(config) => {
+            println!("arguments are good: {:?}", config);
+            make_test_request(&config);
+        },
         Err(ConfigError::MissingAuth) => println!("Authorization info missing or incomplete. Either an API Key or a Username + Password must be provided"),
         Err(ConfigError::MissingUrl) => println!("Missing the Base URL"),
         Err(ConfigError::InvalidUrl) => println!("Invalid Base URL"),
     };
 }
 
+fn make_test_request(config: &ClientConfig) -> () {
+    let uri = config.api_uri(&["x", "projects"]);
+
+    let mut req = Request::new(Method::Get, uri);
+    config.auth_info.apply_to(&mut req);
+    println!("Request:\n{:?}", req);
+}
+
 /// Connection information for Code Dx.
 #[derive(Debug)]
 struct ClientConfig {
-    base_url: hyper::Uri,
+    base_url: Url,
     auth_info: ClientAuthInfo
+}
+
+impl ClientConfig {
+    fn api_uri(&self, segments: &[&str]) -> Uri {
+        let mut url = self.base_url.clone();
+
+        // open a scope to borrow the url mutably
+        {
+            let mut url_segments = url.path_segments_mut()
+                .expect("Can't apply a path to base-url");
+            for segment in segments {
+                url_segments.push(segment);
+            }
+        }
+        // now that the mutable borrow is done, we can use url again
+
+        Uri::from_str(&url.into_string())
+            .expect("Somehow failed to convert a valid URL to a URI")
+    }
 }
 
 /// Authentication credentials for connecting to Code Dx.
@@ -27,6 +61,26 @@ struct ClientConfig {
 enum ClientAuthInfo {
     Basic { username: String, password: String },
     ApiKey(String),
+}
+
+impl ClientAuthInfo {
+    fn apply_to<'a>(&self, request: &'a mut Request) {
+        match *self {
+            ClientAuthInfo::Basic{ ref username, ref password } => {
+                let mut headers = request.headers_mut();
+                headers.set(Authorization(
+                    header::Basic{
+                        username: username.to_owned(),
+                        password: Some(password.to_owned())
+                    }
+                ));
+            },
+            ClientAuthInfo::ApiKey(ref key) => {
+                let mut headers = request.headers_mut();
+                headers.set_raw("API-Key", key.to_owned());
+            },
+        }
+    }
 }
 
 /// Things that can go wrong when parsing a `ClientConfig`
@@ -82,7 +136,7 @@ impl ClientConfig {
 
         let base_uri = match matches.value_of("base-url") {
             None => Err(ConfigError::MissingUrl),
-            Some(raw) => Uri::from_str(raw).map_err(|_| ConfigError::InvalidUrl),
+            Some(raw) => Url::parse(raw).map_err(|_| ConfigError::InvalidUrl),
         };
 
         let client_auth_info = match matches.value_of("api-key") {
