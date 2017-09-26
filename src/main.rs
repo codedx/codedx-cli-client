@@ -1,28 +1,39 @@
 extern crate clap;
-extern crate hyper;
-extern crate url;
 extern crate futures;
-extern crate tokio_core;
+extern crate hyper;
 extern crate serde;
 extern crate serde_json;
-
 #[macro_use]
 extern crate serde_derive;
+extern crate tokio_core;
+extern crate url;
 
 use clap::{Arg, ArgMatches, App};
-use hyper::{Client, Method, Request, Uri};
-use hyper::header::Authorization;
-use hyper::header;
-use std::str::FromStr;
-use url::{Url};
-use tokio_core::reactor::Core;
 use futures::{Future, Stream};
+use hyper::{Client, Method, Request, Uri};
+use hyper::header;
+use hyper::header::Authorization;
+use std::option::Option::*;
+use std::str::FromStr;
+use tokio_core::reactor::Core;
+use url::{Url};
 
 fn main() {
     match ClientConfig::from_cli_args() {
         Ok(config) => {
             println!("arguments are good: {:?}", config);
-            make_test_request(&config);
+            let mut client = ApiClient::new(&config).unwrap();
+            let request = client.get_project_list();
+            match client.run(request) {
+                Ok(projects) => {
+                    for project in projects {
+                        println!("{:?}", project);
+                    }
+                },
+                Err(e) => {
+                    println!("Error in request: {:?}", e);
+                }
+            }
         },
         Err(ConfigError::MissingAuth) => println!("Authorization info missing or incomplete. Either an API Key or a Username + Password must be provided"),
         Err(ConfigError::MissingUrl) => println!("Missing the Base URL"),
@@ -35,50 +46,114 @@ struct ApiProject {
     id: u32,
     name: String,
     #[serde(rename = "parentId")]
-    parent_id: Option<u32>
+    parent_id: Option<u32>,
 }
 
-fn make_test_request(config: &ClientConfig) {
-    let uri = config.api_uri(&["x", "projects"]);
+type BoxedClientFuture<T> = Box<ClientFuture<T>>;
+type ClientFuture<T> = Future<Item = T, Error = ClientError>;
+type ClientResult<T> = Result<T, ClientError>;
 
-    let mut req = Request::new(Method::Get, uri);
-    config.auth_info.apply_to(&mut req);
-    println!("Request:\n{:?}", req);
+struct ApiClient<'a> {
+    config: &'a ClientConfig,
+    core: Core,
+    client: Client<hyper::client::HttpConnector, hyper::Body>
+}
 
-    let mut core = Core::new()
-        .expect("Failed to create an event loop for making HTTP requests");
-    let client: Client<hyper::client::HttpConnector, hyper::Body> = Client::new(&core.handle());
+impl <'a> ApiClient<'a> {
+    fn new(config: &'a ClientConfig) -> std::io::Result<ApiClient> {
+        Core::new().map(|core| {
+            let client = Client::new(&core.handle());
+            ApiClient { config: &config, core, client }
+        })
+    }
 
-    let work = client.request(req).and_then(|res| {
-        println!("Response Status: {}", res.status());
-        res.body()
-            .fold(Vec::new(), |mut acc, chunk| {
-                acc.extend_from_slice(&*chunk);
-                futures::future::ok::<_, hyper::Error>(acc)
-            })
-            .map(|body| {
-                let des: Vec<ApiProject> = serde_json::from_slice(&body).unwrap();
-                for project in des {
-                    println!("{:?}", project);
-                }
-            })
+    pub fn run<T>(&mut self, f: Box<ClientFuture<T>>) -> ClientResult<T> {
+        self.core.run(f)
+    }
+
+    fn get_project_list(&self) -> BoxedClientFuture<Vec<ApiProject>> {
+        self.request_json(Method::Get, &["x", "projects"])
+    }
+
+    /// Underlying method for creating a request to be sent to Code Dx.
+    ///
+    /// Accepts a `method` (GET, POST, etc)
+    /// and `path_segments` which form the API path, e.g. `&["x", "projects"]`.
+    ///
+    /// A type parameter `T` is given to indicate the concrete type the response
+    /// should be deserialized to once the body is parsed as JSON.
+    ///
+    /// Returns a Boxed future that resolves with either the deserialized `T`
+    /// or a `ClientError`.
+    fn request_json<T>(&self, method: Method, path_segments: &[&str]) -> BoxedClientFuture<T>
+        where T: serde::de::DeserializeOwned + std::fmt::Debug + 'static
+    {
+        self.request_json_with_body::<T, String>(method, path_segments, None)
+    }
+
+    /// Underlying method for creating a request to be sent to Code Dx.
+    ///
+    /// Accepts a `method` (GET, POST, etc),
+    /// `path_segments` which form the API path, e.g. `&["x", "projects"]`
+    /// and an optional `body` which will be attached to the request.
+    ///
+    /// A type parameter `T` is given to indicate the concrete type the response
+    /// should be deserialized to once the body is parsed as JSON.
+    ///
+    /// Returns a Boxed future that resolves with either the deserialized `T`
+    /// or a `ClientError`.
+    fn request_json_with_body<T, B: Into<hyper::Body>>(&self, method: Method, path_segments: &[&str], body: Option<B>) -> BoxedClientFuture<T>
+        where T: serde::de::DeserializeOwned + std::fmt::Debug + 'static
+    {
+        let mut req = Request::new(method, self.config.api_uri(path_segments));
+        self.config.auth_info.apply_to(&mut req);
+        for b in body {
+            req.set_body(b);
+        }
+
+        println!("Request:\n{:?}", req);
+
+        Box::new(
+            self.client.request(req)
+                .map_err(|err| ClientError::Protocol(err))
+                .and_then(|res| {
+                    match res.status() {
+                        code if code.is_success() => Ok(res),
+                        code => Err(ClientError::NonSuccess(code))
+                    }
+                })
+                .and_then(|res| {
+                    res.body()
+                        .map_err(|err| ClientError::Protocol(err))
+                        .fold(Vec::new(), |mut acc, chunk| {
+                            acc.extend_from_slice(&*chunk);
+                            futures::future::ok::<_, ClientError>(acc)
+                        })
+                        .and_then(|complete_body| {
+                            serde_json::from_slice::<T>(&complete_body)
+                                .map_err(|err| ClientError::Json(err))
+                        })
+                })
+        )
+    }
+}
 
 
-//        let foo = res.body().concat().and_then(|body| {
-//
-//        });
-//        let x = serde_json::from_reader(res.body());
-//        println!("JSON: {:?}", x);
-//        res.body().for_each(|chunk| {
-//            io::stdout()
-//                .write_all(&chunk)
-//                .map(|_| ())
-//                .map_err(From::from)
-//        })
-    });
 
-    core.run(work)
-        .expect("Failed to make request");
+/// Things that might go wrong when making a request with the client.
+#[derive(Debug)]
+enum ClientError {
+    /// Wrapper for errors in the underlying request, like invalid URI,
+    /// request format, or IO issues while executing the request.
+    Protocol(hyper::Error),
+
+    /// Indicates that the request reached the server but the server
+    /// responded with a non-success (non 2xx) response code.
+    NonSuccess(hyper::StatusCode),
+
+    /// Indicates that the response body was received but could not be
+    /// parsed as JSON in the expected format.
+    Json(serde_json::Error),
 }
 
 /// Connection information for Code Dx.
