@@ -2,17 +2,19 @@ extern crate clap;
 extern crate futures;
 extern crate hyper;
 extern crate serde;
-extern crate serde_json;
-#[macro_use]
-extern crate serde_derive;
 extern crate tokio_core;
 extern crate url;
+
+#[macro_use] extern crate maplit;
+#[macro_use] extern crate serde_json;
+#[macro_use] extern crate serde_derive;
 
 use clap::{Arg, ArgMatches, App};
 use futures::{Future, Stream};
 use hyper::{Client, Method, Request, Uri};
 use hyper::header;
 use hyper::header::Authorization;
+use std::collections::HashMap;
 use std::option::Option::*;
 use std::str::FromStr;
 use tokio_core::reactor::Core;
@@ -26,12 +28,33 @@ fn main() {
             let request = client.get_project_list();
             match client.run(request) {
                 Ok(projects) => {
+                    println!("All projects:");
                     for project in projects {
-                        println!("{:?}", project);
+                        println!("  {:?}", project);
                     }
                 },
                 Err(e) => {
                     println!("Error in request: {:?}", e);
+                }
+            }
+
+            println!("");
+
+            let query_projects = client.query_projects(&ApiProjectFilter {
+                name: Some("scrape"),
+                metadata: Some(hashmap!{
+                    "Owner" => "dylan"
+                })
+            });
+            match client.run(query_projects) {
+                Ok(projects) => {
+                    println!("Projects with a name matching 'scrape' and owned by 'dylan':");
+                    for project in projects {
+                        println!("  {:?}", project);
+                    }
+                },
+                Err(e) => {
+                    println!("Error in request: {:?}", e)
                 }
             }
         },
@@ -39,6 +62,12 @@ fn main() {
         Err(ConfigError::MissingUrl) => println!("Missing the Base URL"),
         Err(ConfigError::InvalidUrl) => println!("Invalid Base URL"),
     };
+}
+
+#[derive(Serialize)]
+struct ApiProjectFilter<'a> {
+    name: Option<&'a str>,
+    metadata: Option<HashMap<&'a str, &'a str>>
 }
 
 #[derive(Deserialize, Debug)]
@@ -59,6 +88,22 @@ struct ApiClient<'a> {
     client: Client<hyper::client::HttpConnector, hyper::Body>
 }
 
+enum ReqBody {
+    Json(serde_json::Value),
+    // TODO: support multipart forms
+}
+
+impl From<ReqBody> for hyper::Body {
+    fn from(body: ReqBody) -> hyper::Body {
+        match body {
+            ReqBody::Json(value) => {
+                let raw_body = serde_json::to_vec(&value).unwrap();
+                hyper::Body::from(raw_body)
+            },
+        }
+    }
+}
+
 impl <'a> ApiClient<'a> {
     fn new(config: &'a ClientConfig) -> std::io::Result<ApiClient> {
         Core::new().map(|core| {
@@ -73,6 +118,13 @@ impl <'a> ApiClient<'a> {
 
     fn get_project_list(&self) -> BoxedClientFuture<Vec<ApiProject>> {
         self.request_json(Method::Get, &["x", "projects"])
+    }
+
+    fn query_projects<'f>(&self, filter: &'f ApiProjectFilter) -> BoxedClientFuture<Vec<ApiProject>> {
+        let body = ReqBody::Json(json!({
+            "filter": filter
+        }));
+        self.request_json_with_body(Method::Post, &["x", "projects", "query"], Some(body))
     }
 
     /// Underlying method for creating a request to be sent to Code Dx.
