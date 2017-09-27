@@ -14,6 +14,8 @@ use clap::{Arg, ArgMatches, App};
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::option::Option::*;
+use std::io::Read;
+use std::path::Path;
 use url::{Url};
 
 fn main() {
@@ -49,6 +51,12 @@ fn main() {
             }
 
             println!();
+            match client.test_upload().expect_success().expect_json::<ApiAnalysisJobResponse>() {
+                Ok(response) => println!("wow a success response: {:?}", response),
+                Err(e) => println!("Error uploading file: {:?}", e),
+            }
+
+            println!();
             println!("Done.");
         },
         Err(ConfigError::MissingAuth) => println!("Authorization info missing or incomplete. Either an API Key or a Username + Password must be provided"),
@@ -73,10 +81,18 @@ struct ApiProject {
     parent_id: Option<u32>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ApiAnalysisJobResponse {
+    #[serde(rename = "analysisId")]
+    analysis_id: u32,
+    #[serde(rename = "jobId")]
+    job_id: String
+}
+
 enum ReqBody {
+    Form(reqwest::multipart::Form),
     Json(serde_json::Value),
     None,
-    // TODO: support multipart forms
 }
 
 impl From<serde_json::Value> for ReqBody {
@@ -84,18 +100,9 @@ impl From<serde_json::Value> for ReqBody {
         ReqBody::Json(json)
     }
 }
-
-impl From<ReqBody> for hyper::Body {
-    fn from(body: ReqBody) -> hyper::Body {
-        match body {
-            ReqBody::Json(value) => {
-                let raw_body = serde_json::to_vec(&value).unwrap();
-                hyper::Body::from(raw_body)
-            },
-            ReqBody::None => {
-                hyper::Body::empty()
-            }
-        }
+impl From<reqwest::multipart::Form> for ReqBody {
+    fn from(form: reqwest::multipart::Form) -> ReqBody {
+        ReqBody::Form(form)
     }
 }
 
@@ -107,7 +114,34 @@ struct ApiClient {
 #[derive(Debug)]
 enum ApiError {
     Protocol(reqwest::Error),
-    NonSuccess(hyper::StatusCode)
+    NonSuccess(hyper::StatusCode, ApiErrorMessage),
+    IO(std::io::Error),
+}
+impl From<std::io::Error> for ApiError {
+    fn from(e: std::io::Error) -> ApiError {
+        ApiError::IO(e)
+    }
+}
+
+#[derive(Debug)]
+enum ApiErrorMessage {
+    Nice(String),
+    Raw(String)
+}
+impl ApiErrorMessage {
+    fn from_body(response: &mut reqwest::Response) -> Result<ApiErrorMessage, ApiError> {
+        let mut body = String::new();
+        response.read_to_string(&mut body).map_err(ApiError::from).and_then(|size|{
+            serde_json::from_str::<ErrorMessageResponse>(&body)
+                .map(|err_body| ApiErrorMessage::Nice(err_body.error))
+                .or_else(|_| Ok(ApiErrorMessage::Raw(body)))
+        })
+    }
+}
+
+#[derive(Deserialize)]
+struct ErrorMessageResponse {
+    error: String
 }
 
 type ApiResult<T> = Result<T, ApiError>;
@@ -123,11 +157,13 @@ impl ApiResponse {
     }
 
     fn expect_success(self) -> ApiResponse {
-        ApiResponse(self.0.and_then(|response| {
+        ApiResponse(self.0.and_then(move |mut response| {
             if response.status().is_success() {
                 Ok(response)
             } else {
-                Err(ApiError::NonSuccess(response.status()))
+                ApiErrorMessage::from_body(&mut response).and_then(|response_msg| {
+                    Err(ApiError::NonSuccess(response.status(), response_msg))
+                })
             }
         }))
     }
@@ -166,6 +202,20 @@ impl ApiClient {
             .expect_json()
     }
 
+    fn test_upload(&self) -> ApiResponse {
+        let file_path = Path::new("D:/CodeDx/data-sets/webgoat-r437/src-r437.zip");
+        // let file_path = Path::new("./Cargo.toml");
+        let form = reqwest::multipart::Form::new()
+            .file("file1", file_path)
+            .map_err(|e| ApiError::IO(e));
+
+        let foo = form.and_then(|form| {
+            self.api_post(&["api", "projects", "4", "analysis"], form).get()
+        });
+
+        ApiResponse::from(foo)
+    }
+
     fn api_get(&self, path_segments: &[&str]) -> ApiResponse {
         self.api_request(hyper::Method::Get, path_segments, ReqBody::None)
     }
@@ -192,6 +242,9 @@ impl ApiClient {
             ReqBody::Json(ref json) => {
                 request_builder.json(json);
             },
+            ReqBody::Form(form) => {
+                request_builder.multipart(form);
+            }
             ReqBody::None => (),
         };
         ApiResponse::from(request_builder.send().map_err(ApiError::from))
