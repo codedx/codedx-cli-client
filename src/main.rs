@@ -1,68 +1,63 @@
 extern crate clap;
 extern crate futures;
-extern crate hyper;
+extern crate reqwest;
+extern crate rustls;
 extern crate serde;
-extern crate tokio_core;
 extern crate url;
 
+#[macro_use] extern crate hyper;
 #[macro_use] extern crate maplit;
 #[macro_use] extern crate serde_json;
 #[macro_use] extern crate serde_derive;
 
 use clap::{Arg, ArgMatches, App};
-use futures::{Future, Stream};
-use hyper::{Client, Method, Request, Uri};
-use hyper::header;
-use hyper::header::Authorization;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::option::Option::*;
-use std::str::FromStr;
-use tokio_core::reactor::Core;
 use url::{Url};
 
 fn main() {
     match ClientConfig::from_cli_args() {
         Ok(config) => {
-            println!("arguments are good: {:?}", config);
-            let mut client = ApiClient::new(&config).unwrap();
-            let request = client.get_project_list();
-            match client.run(request) {
+            let client = ApiClient::new(Box::new(config));
+
+            match client.get_projects() {
                 Ok(projects) => {
                     println!("All projects:");
                     for project in projects {
                         println!("  {:?}", project);
                     }
                 },
-                Err(e) => {
-                    println!("Error in request: {:?}", e);
-                }
+                Err(e) => println!("Error loading all projects: {:?}", e),
             }
 
-            println!("");
-
-            let query_projects = client.query_projects(&ApiProjectFilter {
+            println!();
+            let query_result = client.query_projects(&ApiProjectFilter {
                 name: Some("scrape"),
                 metadata: Some(hashmap!{
                     "Owner" => "dylan"
                 })
             });
-            match client.run(query_projects) {
+            match query_result {
                 Ok(projects) => {
                     println!("Projects with a name matching 'scrape' and owned by 'dylan':");
                     for project in projects {
                         println!("  {:?}", project);
                     }
                 },
-                Err(e) => {
-                    println!("Error in request: {:?}", e)
-                }
+                Err(e) => println!("Error querying projects: {:?}", e),
             }
+
+            println!();
+            println!("Done.");
         },
         Err(ConfigError::MissingAuth) => println!("Authorization info missing or incomplete. Either an API Key or a Username + Password must be provided"),
         Err(ConfigError::MissingUrl) => println!("Missing the Base URL"),
         Err(ConfigError::InvalidUrl) => println!("Invalid Base URL"),
     };
 }
+
+header!{ (ApiKey, "API-Key") => [String] }
 
 #[derive(Serialize)]
 struct ApiProjectFilter<'a> {
@@ -78,19 +73,16 @@ struct ApiProject {
     parent_id: Option<u32>,
 }
 
-type BoxedClientFuture<T> = Box<ClientFuture<T>>;
-type ClientFuture<T> = Future<Item = T, Error = ClientError>;
-type ClientResult<T> = Result<T, ClientError>;
-
-struct ApiClient<'a> {
-    config: &'a ClientConfig,
-    core: Core,
-    client: Client<hyper::client::HttpConnector, hyper::Body>
-}
-
 enum ReqBody {
     Json(serde_json::Value),
+    None,
     // TODO: support multipart forms
+}
+
+impl From<serde_json::Value> for ReqBody {
+    fn from(json: serde_json::Value) -> ReqBody {
+        ReqBody::Json(json)
+    }
 }
 
 impl From<ReqBody> for hyper::Body {
@@ -100,123 +92,122 @@ impl From<ReqBody> for hyper::Body {
                 let raw_body = serde_json::to_vec(&value).unwrap();
                 hyper::Body::from(raw_body)
             },
+            ReqBody::None => {
+                hyper::Body::empty()
+            }
         }
     }
 }
 
-impl <'a> ApiClient<'a> {
-    fn new(config: &'a ClientConfig) -> std::io::Result<ApiClient> {
-        Core::new().map(|core| {
-            let client = Client::new(&core.handle());
-            ApiClient { config: &config, core, client }
+struct ApiClient {
+    config: Box<ClientConfig>,
+    client: reqwest::Client
+}
+
+#[derive(Debug)]
+enum ApiError {
+    Protocol(reqwest::Error),
+    NonSuccess(hyper::StatusCode)
+}
+
+type ApiResult<T> = Result<T, ApiError>;
+struct ApiResponse(ApiResult<reqwest::Response>);
+
+impl ApiResponse {
+    fn from(r: ApiResult<reqwest::Response>) -> ApiResponse {
+        ApiResponse(r)
+    }
+
+    fn get(self) -> ApiResult<reqwest::Response> {
+        self.0
+    }
+
+    fn expect_success(self) -> ApiResponse {
+        ApiResponse(self.0.and_then(|response| {
+            if response.status().is_success() {
+                Ok(response)
+            } else {
+                Err(ApiError::NonSuccess(response.status()))
+            }
+        }))
+    }
+
+    fn expect_json<T: DeserializeOwned>(self) -> ApiResult<T> {
+        self.0.and_then(|mut response| {
+            response.json().map_err(ApiError::from)
         })
     }
+}
 
-    pub fn run<T>(&mut self, f: Box<ClientFuture<T>>) -> ClientResult<T> {
-        self.core.run(f)
-    }
-
-    fn get_project_list(&self) -> BoxedClientFuture<Vec<ApiProject>> {
-        self.request_json(Method::Get, &["x", "projects"])
-    }
-
-    fn query_projects<'f>(&self, filter: &'f ApiProjectFilter) -> BoxedClientFuture<Vec<ApiProject>> {
-        let body = ReqBody::Json(json!({
-            "filter": filter
-        }));
-        self.request_json_with_body(Method::Post, &["x", "projects", "query"], Some(body))
-    }
-
-    /// Underlying method for creating a request to be sent to Code Dx.
-    ///
-    /// Accepts a `method` (GET, POST, etc)
-    /// and `path_segments` which form the API path, e.g. `&["x", "projects"]`.
-    ///
-    /// A type parameter `T` is given to indicate the concrete type the response
-    /// should be deserialized to once the body is parsed as JSON.
-    ///
-    /// Returns a Boxed future that resolves with either the deserialized `T`
-    /// or a `ClientError`.
-    fn request_json<T>(&self, method: Method, path_segments: &[&str]) -> BoxedClientFuture<T>
-        where T: serde::de::DeserializeOwned + std::fmt::Debug + 'static
-    {
-        self.request_json_with_body::<T, String>(method, path_segments, None)
-    }
-
-    /// Underlying method for creating a request to be sent to Code Dx.
-    ///
-    /// Accepts a `method` (GET, POST, etc),
-    /// `path_segments` which form the API path, e.g. `&["x", "projects"]`
-    /// and an optional `body` which will be attached to the request.
-    ///
-    /// A type parameter `T` is given to indicate the concrete type the response
-    /// should be deserialized to once the body is parsed as JSON.
-    ///
-    /// Returns a Boxed future that resolves with either the deserialized `T`
-    /// or a `ClientError`.
-    fn request_json_with_body<T, B: Into<hyper::Body>>(&self, method: Method, path_segments: &[&str], body: Option<B>) -> BoxedClientFuture<T>
-        where T: serde::de::DeserializeOwned + std::fmt::Debug + 'static
-    {
-        let mut req = Request::new(method, self.config.api_uri(path_segments));
-        self.config.auth_info.apply_to(&mut req);
-        for b in body {
-            req.set_body(b);
-        }
-
-        println!("Request:\n{:?}", req);
-
-        Box::new(
-            self.client.request(req)
-                .map_err(|err| ClientError::Protocol(err))
-                .and_then(|res| {
-                    match res.status() {
-                        code if code.is_success() => Ok(res),
-                        code => Err(ClientError::NonSuccess(code))
-                    }
-                })
-                .and_then(|res| {
-                    res.body()
-                        .map_err(|err| ClientError::Protocol(err))
-                        .fold(Vec::new(), |mut acc, chunk| {
-                            acc.extend_from_slice(&*chunk);
-                            futures::future::ok::<_, ClientError>(acc)
-                        })
-                        .and_then(|complete_body| {
-                            serde_json::from_slice::<T>(&complete_body)
-                                .map_err(|err| ClientError::Json(err))
-                        })
-                })
-        )
+impl From<reqwest::Error> for ApiError {
+    fn from(err: reqwest::Error) -> ApiError {
+        ApiError::Protocol(err)
     }
 }
 
+impl ApiClient {
+    fn new(config: Box<ClientConfig>) -> ApiClient {
+        let client = reqwest::Client::builder()
+            // various client config methods could go here
+            .build()
+            .unwrap();
+        ApiClient { config, client }
+    }
 
+    fn get_projects(&self) -> ApiResult<Vec<ApiProject>> {
+        self.api_get(&["x", "projects"])
+            .expect_success()
+            .expect_json()
+    }
 
-/// Things that might go wrong when making a request with the client.
-#[derive(Debug)]
-enum ClientError {
-    /// Wrapper for errors in the underlying request, like invalid URI,
-    /// request format, or IO issues while executing the request.
-    Protocol(hyper::Error),
+    fn query_projects<'a>(&self, filter: &'a ApiProjectFilter) -> ApiResult<Vec<ApiProject>> {
+        self.api_post(&["x", "projects", "query"], json!({ "filter": filter }))
+            .expect_success()
+            .expect_json()
+    }
 
-    /// Indicates that the request reached the server but the server
-    /// responded with a non-success (non 2xx) response code.
-    NonSuccess(hyper::StatusCode),
+    fn api_get(&self, path_segments: &[&str]) -> ApiResponse {
+        self.api_request(hyper::Method::Get, path_segments, ReqBody::None)
+    }
 
-    /// Indicates that the response body was received but could not be
-    /// parsed as JSON in the expected format.
-    Json(serde_json::Error),
+    fn api_post<B>(&self, path_segments: &[&str], body: B) -> ApiResponse
+        where B: Into<ReqBody>
+    {
+        self.api_request(hyper::Method::Post, path_segments, body)
+    }
+
+    fn api_put<B>(&self, path_segments: &[&str], body: B) -> ApiResponse
+        where B: Into<ReqBody>
+    {
+        self.api_request(hyper::Method::Put, path_segments, body)
+    }
+
+    fn api_request<B>(&self, method: hyper::Method, path_segments: &[&str], body: B) -> ApiResponse
+        where B: Into<ReqBody>
+    {
+        let url = self.config.api_url(path_segments);
+        let mut request_builder = self.client.request(method, url);
+        self.config.auth_info.apply_to(&mut request_builder);
+        match body.into() {
+            ReqBody::Json(ref json) => {
+                request_builder.json(json);
+            },
+            ReqBody::None => (),
+        };
+        ApiResponse::from(request_builder.send().map_err(ApiError::from))
+    }
 }
 
 /// Connection information for Code Dx.
 #[derive(Debug)]
 struct ClientConfig {
     base_url: Url,
-    auth_info: ClientAuthInfo
+    auth_info: ClientAuthInfo,
+    insecure: bool
 }
 
 impl ClientConfig {
-    fn api_uri(&self, segments: &[&str]) -> Uri {
+    fn api_url(&self, segments: &[&str]) -> Url {
         let mut url = self.base_url.clone();
 
         // open a scope to borrow the url mutably
@@ -228,9 +219,7 @@ impl ClientConfig {
             }
         }
         // now that the mutable borrow is done, we can use url again
-
-        Uri::from_str(&url.into_string())
-            .expect("Somehow failed to convert a valid URL to a URI")
+        url
     }
 }
 
@@ -243,21 +232,16 @@ enum ClientAuthInfo {
 }
 
 impl ClientAuthInfo {
-    fn apply_to<'a>(&self, request: &'a mut Request) {
+    fn apply_to(&self, request_builder: &mut reqwest::RequestBuilder) {
         match *self {
-            ClientAuthInfo::Basic{ ref username, ref password } => {
-                let mut headers = request.headers_mut();
-                headers.set(Authorization(
-                    header::Basic{
-                        username: username.to_owned(),
-                        password: Some(password.to_owned())
-                    }
-                ));
+            ClientAuthInfo::Basic { ref username, ref password } => {
+                let u: String = username.to_owned();
+                let p: String = password.to_owned();
+                request_builder.basic_auth(u, Some(p));
             },
             ClientAuthInfo::ApiKey(ref key) => {
-                let mut headers = request.headers_mut();
-                headers.set_raw("API-Key", key.to_owned());
-            },
+                request_builder.header(ApiKey(key.to_string()));
+            }
         }
     }
 }
@@ -310,6 +294,11 @@ impl ClientConfig {
                 .value_name("VALUE")
                 .help("for key-based auth, the API Key")
                 .takes_value(true)
+            )
+            .arg(Arg::with_name("insecure")
+                .long("insecure")
+                .takes_value(false)
+                .help("ignore https certificate validation")
             );
         let matches = get_matches(app);
 
@@ -332,11 +321,14 @@ impl ClientConfig {
             },
         };
 
+        let insecure = matches.is_present("insecure");
+
         base_uri.and_then(|uri| {
             client_auth_info.map(|auth| {
                 ClientConfig {
                     base_url: uri,
-                    auth_info: auth
+                    auth_info: auth,
+                    insecure
                 }
             })
         })
