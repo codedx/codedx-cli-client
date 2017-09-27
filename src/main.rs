@@ -51,9 +51,13 @@ fn main() {
             }
 
             println!();
-            match client.test_upload().expect_success().expect_json::<ApiAnalysisJobResponse>() {
-                Ok(response) => println!("wow a success response: {:?}", response),
-                Err(e) => println!("Error uploading file: {:?}", e),
+            let analysis_job_result = client.start_analysis(4, vec![
+                Path::new("D:/CodeDx/data-sets/webgoat eval/bin-webgoat-r437.zip"),
+                Path::new("D:/CodeDx/data-sets/webgoat eval/src-webgoat-r437.zip")
+            ]);
+            match analysis_job_result {
+                Ok(response) => println!("Started analysis: {:?}", response),
+                Err(e) => println!("Couldn't start analysis: {:?}", e),
             }
 
             println!();
@@ -202,18 +206,20 @@ impl ApiClient {
             .expect_json()
     }
 
-    fn test_upload(&self) -> ApiResponse {
-        let file_path = Path::new("D:/CodeDx/data-sets/webgoat-r437/src-r437.zip");
-        // let file_path = Path::new("./Cargo.toml");
-        let form = reqwest::multipart::Form::new()
-            .file("file1", file_path)
-            .map_err(|e| ApiError::IO(e));
+    fn start_analysis(&self, project_id: u32, files: Vec<&Path>) -> ApiResult<ApiAnalysisJobResponse> {
+        let form= files
+            .iter()
+            .enumerate()
+            .fold(Ok(reqwest::multipart::Form::new()), |maybe_form, (index, file)| {
+                maybe_form.and_then(|form| form.file(format!("file{}", index), file))
+            })
+            .map_err(ApiError::from);
 
-        let foo = form.and_then(|form| {
-            self.api_post(&["api", "projects", "4", "analysis"], form).get()
-        });
-
-        ApiResponse::from(foo)
+        form.and_then(|form| {
+            self.api_post(&["api", "projects", &project_id.to_string(), "analysis"], form)
+                .expect_success()
+                .expect_json::<ApiAnalysisJobResponse>()
+        })
     }
 
     fn api_get(&self, path_segments: &[&str]) -> ApiResponse {
