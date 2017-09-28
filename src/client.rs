@@ -6,8 +6,11 @@ use serde::ser::Serialize;
 use serde_json;
 use std;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::io::Read;
 use std::path::Path;
+use std::thread;
+use std::time::Duration;
 
 
 /// Project filter criteria used with `ApiClient::query_projects` to define project filter criteria.
@@ -61,7 +64,47 @@ pub struct ApiAnalysisJobResponse {
     pub job_id: String
 }
 
+/// Enumeration representing the 5 possible statuses a Code Dx "job" may be in.
+#[serde(rename_all = "lowercase")]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
+pub enum JobStatus {
+    Queued,
+    Running,
+    Cancelled,
+    Completed,
+    Failed
+}
+impl JobStatus {
+    pub fn is_ready(&self) -> bool {
+        match *self {
+            JobStatus::Completed => true,
+            JobStatus::Failed => true,
+            _ => false
+        }
+    }
+    pub fn is_success(&self) -> bool {
+        match *self {
+            JobStatus::Completed => true,
+            _ => false
+        }
+    }
+}
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct JobStatusResponse {
+    /// ID of the requested job.
+    ///
+    /// This should be the same as the `job_id` sent when you requested the status in the first place.
+    #[serde(rename = "jobId")]
+    pub job_id: String,
+
+    /// The actual job status.
+    pub status: JobStatus,
+
+    // there are some optional fields like "progress", "blockedBy", and "reason"
+    // which are present depending on the status, but they aren't necessary for
+    // our use case, so I'm not going to model them.
+}
 
 /// Things that can go wrong when making requests with the API.
 #[derive(Debug)]
@@ -116,6 +159,25 @@ impl ApiErrorMessage {
 #[derive(Deserialize)]
 struct ErrorMessageResponse {
     error: String
+}
+
+/// Defines a polling strategy based on the iteration number and current state of the poll.
+///
+/// The `next_wait` function decides how long the polling process should wait before re-checking the state.
+/// If it returns `Some(duration)`, the polling process will wait that duration before re-checking.
+/// If it returns `None`, the polling process will immediately end, typically returning the latest state.
+///
+/// The `iteration_number` will start at `1` and increment every time `next_wait` is called for the current poll.
+pub trait PollingStrategy<T> {
+    fn next_wait(&self, iteration_number: usize, state: &T) -> Option<Duration>;
+}
+
+/// Simple polling strategy that always waits a fixed amount of time between iterations.
+impl <T: Debug> PollingStrategy<T> for Duration {
+    fn next_wait(&self, iteration_number: usize, state: &T) -> Option<Duration> {
+        println!("in poll (iteration {}, state: {:?})", iteration_number, state);
+        Some(*self)
+    }
 }
 
 pub type ApiResult<T> = Result<T, ApiError>;
@@ -176,6 +238,46 @@ impl ApiClient {
         ApiClient { config, client }
     }
 
+    pub fn get_job_status(&self, job_id: &str) -> ApiResult<JobStatus> {
+        self.api_get(&["api", "jobs", job_id])
+            .expect_success()
+            .expect_json::<JobStatusResponse>()
+            .map(|jsr| jsr.status)
+    }
+
+    /// Repeatedly call `get_job_status(job_id)` until it returns an error or a "ready" status.
+    ///
+    /// Uses the provided `polling_stategy` to determine how long to wait between each status
+    /// check, and whether to abort early.
+    ///
+    /// If the `polling_strategy` decides to abort early, the result of the poll will be the
+    /// most recent `JobStatus` to be passed.
+    ///
+    /// If at any point the job status check fails (i.e. `get_job_status` returns an `Err(_)`),
+    /// the poll will immediately stop, returning that error.
+    pub fn poll_job_completion<P: PollingStrategy<JobStatus>>(&self, job_id: &str, polling_strategy: P) -> ApiResult<JobStatus> {
+        let mut iteration_number: usize = 0;
+        loop {
+            let status_result = self.get_job_status(job_id);
+            iteration_number += 1;
+            match status_result {
+                Ok(status) => {
+                    if status.is_ready() {
+                        break status_result;
+                    } else {
+                        // call the "step" function to see if the poll should continue,
+                        // and if so, how long it should wait before checking again
+                        match polling_strategy.next_wait(iteration_number, &status) {
+                            Some(wait_dur) => thread::sleep(wait_dur),
+                            None => break status_result,
+                        }
+                    }
+                },
+                Err(_) => break status_result,
+            }
+        }
+    }
+
     pub fn get_projects(&self) -> ApiResult<Vec<ApiProject>> {
         self.api_get(&["x", "projects"])
             .expect_success()
@@ -202,6 +304,13 @@ impl ApiClient {
                 .expect_success()
                 .expect_json::<ApiAnalysisJobResponse>()
         })
+    }
+
+    pub fn set_analysis_name(&self, project_id: u32, analysis_id: u32, name: &str) -> ApiResult<()> {
+        self.api_put(&["x", "projects", &project_id.to_string(), "analyses", &analysis_id.to_string()], json!({ "name": name }))
+            .expect_success()
+            .get()
+            .map(|_| ())
     }
 
     pub fn api_get(&self, path_segments: &[&str]) -> ApiResponse {
