@@ -5,10 +5,8 @@ authors = ["Dylan Halperin <dylan@dylemma.io>"]
 
 [dependencies]
 clap = "2.26.2"
-futures = "0.1"
 hyper = "0.11"
 maplit = "0.1.4"
-rustls = "0.11"
 url = "1.5.1"
 serde = "1.0"
 serde_json = "1.0"
@@ -16,6 +14,3 @@ serde_derive = "1.0"
 
 # waiting for https://github.com/seanmonstar/reqwest/pull/190 to be released
 reqwest = { git = "https://github.com/seanmonstar/reqwest", branch = "master"}
-
-[features]
-default = ["rustls/dangerous_configuration"]
