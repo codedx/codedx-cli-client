@@ -29,15 +29,18 @@ impl <'a> ApiProjectFilter<'a> {
             metadata: Some(metadata)
         }
     }
+    #[allow(dead_code)]
     pub fn empty() -> ApiProjectFilter<'static> {
         ApiProjectFilter{ name: None, metadata: None }
     }
+    #[allow(dead_code)]
     pub fn with_name(&self, name: &'a str) -> ApiProjectFilter<'a> {
         ApiProjectFilter {
             name: Some(name),
             metadata: self.metadata.clone()
         }
     }
+    #[allow(dead_code)]
     pub fn with_metadata(&self, metadata: HashMap<&'a str, &'a str>) -> ApiProjectFilter<'a> {
         ApiProjectFilter {
             name: self.name,
@@ -82,6 +85,7 @@ impl JobStatus {
             _ => false
         }
     }
+    #[allow(dead_code)]
     pub fn is_success(&self) -> bool {
         match *self {
             JobStatus::Completed => true,
@@ -358,6 +362,7 @@ pub enum ReqBody {
     None,
 }
 impl ReqBody {
+    #[allow(dead_code)]
     pub fn as_json<T: Serialize>(body: T) -> ReqBody {
         ReqBody::Json(serde_json::to_value(body).unwrap())
     }

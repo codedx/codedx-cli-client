@@ -6,10 +6,13 @@ extern crate url;
 
 #[macro_use] extern crate hyper;
 #[macro_use] extern crate maplit;
+#[macro_use] extern crate nom;
 #[macro_use] extern crate serde_json;
 #[macro_use] extern crate serde_derive;
 
 use chrono::Utc;
+use clap::{Arg, App, AppSettings, SubCommand};
+use std::io;
 use std::path::Path;
 use std::time::Duration;
 
@@ -19,7 +22,109 @@ use config::*;
 mod client;
 use client::*;
 
-fn main() {
+mod repl;
+use repl::CmdArgs;
+
+fn main(){
+    let arg1 = ::std::env::args().nth(1);
+    match arg1 {
+        Some(ref flag) if flag == "--repl" => {
+            println!("repl mode!");
+            run_repl();
+        },
+        _ => {
+            println!("arg was {:?}", arg1);
+            main2();
+        },
+    }
+}
+
+fn run_repl() {
+    loop {
+        // grab a line from STDIN
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)
+            .expect("failed to read line");
+
+        // ignore the trailing \n stuff
+        let line = input.trim();
+
+        if line.is_empty() {
+            continue;
+        } else {
+            if let Ok(args) = line.parse::<CmdArgs>() {
+                let mut args_vec = args.0;
+                args_vec.insert(0, "<placeholder>".to_string());
+
+                let matches = repl_app().get_matches_from_safe(args_vec);
+
+                match matches {
+                    Err(ref e) => {
+                        match e.kind {
+                            clap::ErrorKind::HelpDisplayed => {
+                                repl_app().print_help().unwrap();
+                                println!();
+                            },
+                            clap::ErrorKind::VersionDisplayed => {
+                                repl_app().write_version(&mut io::stdout()).unwrap();
+                                println!();
+                            }
+                            _ => {
+                                e.write_to(&mut io::stdout()).unwrap();
+                                println!();
+                            },
+                        }
+                    },
+                    Ok(arg_matches) => {
+                        if let Some(_) = arg_matches.subcommand_matches("exit") {
+                            break;
+                        }
+
+                        println!("matches: {:?}", arg_matches);
+                    },
+                };
+            }
+        }
+
+    }
+    println!("bye");
+}
+
+/// Get a copy of the "App" for the internal REPL.
+///
+/// Note that since some of the methods we want to use on it will "consume" it,
+/// we need to be able to easily get copies of the whole App for convenience.
+fn repl_app() -> App<'static, 'static> {
+    App::new("My Super Program")
+        .bin_name("")
+        .version("2.6.1")
+        .setting(AppSettings::VersionlessSubcommands)
+        .setting(AppSettings::ColoredHelp)
+        .subcommand(SubCommand::with_name("analyze")
+            .about("Analyze some files")
+            .arg(Arg::with_name("name")
+                .short("n")
+                .long("name")
+                .value_name("NAME")
+                .takes_value(true)
+                .required(false)
+            )
+            .arg(Arg::with_name("file")
+                .short("f")
+                .long("file")
+                .value_name("FILE")
+                .takes_value(true)
+                .multiple(true)
+                .required(true)
+            )
+        )
+        .subcommand(SubCommand::with_name("exit")
+            .alias("quit")
+            .about("Exit this program ('quit' works too)")
+        )
+}
+
+fn main2() {
     match ClientConfig::from_cli_args() {
         Ok(config) => {
             let client = ApiClient::new(Box::new(config));

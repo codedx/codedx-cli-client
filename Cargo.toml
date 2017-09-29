@@ -6,6 +6,7 @@ authors = ["Dylan Halperin <dylan@dylemma.io>"]
 [dependencies]
 chrono = "0.4"
 clap = "2.26.2"
+colored = "1.5.3"
 hyper = "0.11"
 maplit = "0.1.4"
 url = "1.5.1"
@@ -15,3 +16,7 @@ serde_derive = "1.0"
 
 # waiting for https://github.com/seanmonstar/reqwest/pull/190 to be released
 reqwest = { git = "https://github.com/seanmonstar/reqwest", branch = "master"}
+
+[dependencies.nom]
+version = "3.2"
+features = ["verbose-errors"]
