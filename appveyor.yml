@@ -52,7 +52,7 @@ test_script:
 
 before_deploy:
   # TODO Update this to build the artifacts that matter to you
-  - cargo build --target %TARGET% --release -- -C lto
+  - cargo build --target %TARGET% --release
   - ps: ci\before_deploy.ps1
 
 deploy:
