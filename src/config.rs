@@ -1,3 +1,10 @@
+extern crate clap;
+extern crate reqwest;
+extern crate url;
+
+/// gets us the header! macro
+//#[macro_use] extern crate hyper;
+
 use clap::{Arg, ArgMatches, App};
 use reqwest::{RequestBuilder};
 use url::Url;
@@ -5,9 +12,10 @@ use url::Url;
 /// Connection information for Code Dx.
 #[derive(Debug)]
 pub struct ClientConfig {
-    base_url: Url,
-    auth_info: ClientAuth,
-    insecure: bool
+    pub base_url: Url,
+    pub auth_info: ClientAuth,
+    pub insecure: bool,
+    pub no_prompt: bool
 }
 
 /// declares the `ApiKey` type which implements the Header trait
@@ -89,6 +97,11 @@ impl ClientConfig {
                 .long("insecure")
                 .takes_value(false)
                 .help("ignore https certificate validation")
+            )
+            .arg(Arg::with_name("no-prompt")
+                .long("no-prompt")
+                .takes_value(false)
+                .help("don't output REPL prompts to STDOUT")
             );
         let matches = get_matches(app);
 
@@ -112,13 +125,15 @@ impl ClientConfig {
         };
 
         let insecure = matches.is_present("insecure");
+        let no_prompt = matches.is_present("no-prompt");
 
         base_uri.and_then(|uri| {
             client_auth_info.map(|auth| {
                 ClientConfig {
                     base_url: uri,
                     auth_info: auth,
-                    insecure
+                    insecure,
+                    no_prompt,
                 }
             })
         })

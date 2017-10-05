@@ -17,40 +17,14 @@ use std::time::Duration;
 #[derive(Debug, Serialize)]
 pub struct ApiProjectFilter<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<&'a str>,
+    pub name: Option<&'a str>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    metadata: Option<HashMap<&'a str, &'a str>>
-}
-impl <'a> ApiProjectFilter<'a> {
-    pub fn new(name: &'a str, metadata: HashMap<&'a str, &'a str>) -> ApiProjectFilter<'a> {
-        ApiProjectFilter{
-            name: Some(name),
-            metadata: Some(metadata)
-        }
-    }
-    #[allow(dead_code)]
-    pub fn empty() -> ApiProjectFilter<'static> {
-        ApiProjectFilter{ name: None, metadata: None }
-    }
-    #[allow(dead_code)]
-    pub fn with_name(&self, name: &'a str) -> ApiProjectFilter<'a> {
-        ApiProjectFilter {
-            name: Some(name),
-            metadata: self.metadata.clone()
-        }
-    }
-    #[allow(dead_code)]
-    pub fn with_metadata(&self, metadata: HashMap<&'a str, &'a str>) -> ApiProjectFilter<'a> {
-        ApiProjectFilter {
-            name: self.name,
-            metadata: Some(metadata)
-        }
-    }
+    pub metadata: Option<HashMap<&'a str, &'a str>>
 }
 
 /// A project provided by the Code Dx API.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ApiProject {
     pub id: u32,
     pub name: String,
@@ -179,7 +153,7 @@ pub trait PollingStrategy<T> {
 /// Simple polling strategy that always waits a fixed amount of time between iterations.
 impl <T: Debug> PollingStrategy<T> for Duration {
     fn next_wait(&self, iteration_number: usize, state: &T) -> Option<Duration> {
-        println!("in poll (iteration {}, state: {:?})", iteration_number, state);
+        println!("# Polling job completion, iteration {}: status = {:?}", iteration_number, state);
         Some(*self)
     }
 }
@@ -240,6 +214,10 @@ impl ApiClient {
         }
         let client = client_builder.build().unwrap();
         ApiClient { config, client }
+    }
+
+    pub fn get_config(&self) -> &ClientConfig {
+        self.config.as_ref()
     }
 
     pub fn get_job_status(&self, job_id: &str) -> ApiResult<JobStatus> {
