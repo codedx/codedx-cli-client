@@ -69,12 +69,12 @@ before_deploy:
   - sh ci/before_deploy.sh
 
 deploy:
-  # TODO update `api_key.secure`
+  # To replace `api_key.secure`, do the following:
   # - Create a `public_repo` GitHub token. Go to: https://github.com/settings/tokens/new
   # - Encrypt it: `travis encrypt 0123456789012345678901234567890123456789
   # - Paste the output down here
   api_key:
-    secure: A9v3PIzQQ4U08OHFmDPQzNXbNHEb7YHyLXCvMF+dXFuNSvhUNlmQYykxqUf3dvikhJL2/bsZ14umm7ni7fQh0tGwJ4+lPpNzYAcweGgNXnWvjTpY6ovuRbr3gs4/srkyxp/GBDmSW5L8wFN3hKCB+Lm0YnIPB9IA2afP8a30+8VTXT9nv7pNqGny4ilN41ycr4DZi3sQoXdbruy7ClN7gsWW/GUiudBccHVIjmTapOFKLwZHODaUl/1/RDWQzh+i+17e1ivXuJPktDSrqmHPTZ15OjklnHKd6t179ry6VkGRg4R/R/YukVIqGzeaXGWAwdAQ5gE8cjGZghJLVi2jkDBJ85z8MvT+zLZLyliiuhLc/X8y7mkE1n0FKFtXXzFVt0l7V1LaEKbIbiV6XX3jsir4qgkqWjPHBZqO5mkGNFS16Dmt30/ZtEPAzXiINFXbWuWrpQ/LZ4NSto8IMrRTcoyDbAga/KYxJiNIeVuCe1E9dbytDM7K0GLtxJTul/WnnSeI6r//EFyC4bxYjyHhCXaag4q14KM+ak4rB0QgxsYzyGuh2MqyCoVj8YJLjLdKnL/SV7W7LPD40xlxvI6VCYTVi2ILHwL6vCxpukXYteX0c5IAIWkISDKu6nNBEgmCHXXPSqYSrgE5g7/QoCQHI8++nR8iKe0s7TWxZRydby8=
+    secure: RPi5heDvBOmPFx9zAxI0IngmprsLL5ArErXhEaFh4e+C4CtZbyG9jTJrDta3DWKTLtmGBvbXSxF1UL/cUyBPXVBCS1I1ENenvoB7rshik9UG0m/NMMODaq+x1+vFY1hykuO+HmwQSd4wCDcfRE+xcA8q7dmXQc74EbWNdOUfRWEnY2bhqeVtunnDjR1CTKBHRxlfm66dLdzXXx7t0HjQvoGd6ef3DfT3sCQJ5SX2FCxXTff0Bg6XXacIQb5ikTUgeG2YMUNqpn5tkt3see7lI61kXIQUliEBlHzhNL3GYOAuR24+qCkzi7WTlSj1wtmOBDYtYADpQ0k5ZxYXauT5obPCH0tJJFUjOOHNNSX+zXgYSRZCH3y/kfT/JXZZsOy3YlmhtJAuT9gpgtbGKHvCuhRVzMOEw2At/dpekv4hW4oUTwE6XZChYfdKVBMn2VvwHeccLtB4hotVCy0kODA2HUWGU2KxErQIFhCSHWQooIJG/guDzeQcohhJbm/DTi4nv0zlVYKoq44rIgQODzP4UfVqEkyO6+NuIzPiMrhoZK5DRkHKoBg44co5nWoJoNS6r3j6YyHEwFoOA4loRRBZtfq+JOp2D0q2jAViCbq/iNDd+6gFRoWobsXIAi91ezyRuVfmCtaxfm7eXTdrfklXU87ZPLnz8qFrc1FmIzx6cfs=
   file_glob: true
   file: $CRATE_NAME-$TRAVIS_TAG-$TARGET.*
   on:
