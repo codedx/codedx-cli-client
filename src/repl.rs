@@ -101,7 +101,7 @@ named!(one_arg <String>, alt!(dq_string | sq_string | consecutive_string));
 named!(arg_list<Vec<String>>, separated_list!(is_a!(" \t"), one_arg));
 
 #[cfg(test)]
-fn test_parse(s: &str) -> Result<Vec<String>, Err<&[u8]>> {
+fn test_parse(s: &str) -> Result<Vec<String>, ::nom::Err<&[u8]>> {
     arg_list(s.as_ref()).to_result()
 }
 
