@@ -61,7 +61,7 @@ impl ClientConfig {
         where F: for<'b> FnOnce(App<'a, 'b>) -> ArgMatches<'a>
     {
         let app = App::new("codedx-client")
-            .version("0.1")
+            .version("0.1.0")
             .author("Dylan H <DylanH@codedx.com>")
             .about("CLI client for the Code Dx REST API")
             .arg(Arg::with_name("base-url")
