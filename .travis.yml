@@ -6,51 +6,22 @@ language: rust
 services: docker
 sudo: required
 
-# TODO Rust builds on stable by default, this can be
-# overridden on a case by case basis down below.
-
 env:
   global:
     - CRATE_NAME=codedx-client
 
 matrix:
-  # TODO These are all the build jobs. Adjust as necessary. Comment out what you don't need
   include:
     # Linux
-#    - env: TARGET=i686-unknown-linux-gnu
-#    - env: TARGET=i686-unknown-linux-musl
-    - env: TARGET=x86_64-unknown-linux-gnu
-    - env: TARGET=x86_64-unknown-linux-musl
+    # GNU and MUSL are interchangeable for our purposes, but MUSL is
+    # purportedly safer and has a smaller memory footprint. This program
+    # is I/O-bound, so speed isn't really a factor, so we'll use MUSL.
+    - env: TARGET=x86_64-unknown-linux-musl TARGET_NICE=linux
+    # - env: TARGET=x86_64-unknown-linux-gnu TARGET_NICE=gnu-linux
 
     # OSX
-#    - env: TARGET=i686-apple-darwin
-#      os: osx
-    - env: TARGET=x86_64-apple-darwin
+    - env: TARGET=x86_64-apple-darwin TARGET_NICE=mac
       os: osx
-
-    # *BSD
-#    - env: TARGET=i686-unknown-freebsd DISABLE_TESTS=1
-    - env: TARGET=x86_64-unknown-freebsd DISABLE_TESTS=1
-    - env: TARGET=x86_64-unknown-netbsd DISABLE_TESTS=1
-
-    # Other architectures
-#    - env: TARGET=aarch64-unknown-linux-gnu
-#    - env: TARGET=armv7-unknown-linux-gnueabihf
-#    - env: TARGET=mips-unknown-linux-gnu
-#    - env: TARGET=mips64-unknown-linux-gnuabi64
-#    - env: TARGET=mips64el-unknown-linux-gnuabi64
-#    - env: TARGET=mipsel-unknown-linux-gnu
-#    - env: TARGET=powerpc-unknown-linux-gnu
-#    - env: TARGET=powerpc64-unknown-linux-gnu
-#    - env: TARGET=powerpc64le-unknown-linux-gnu
-#    - env: TARGET=s390x-unknown-linux-gnu DISABLE_TESTS=1
-
-    # Testing other channels
-#    - env: TARGET=x86_64-unknown-linux-gnu
-#      rust: nightly
-#    - env: TARGET=x86_64-apple-darwin
-#      os: osx
-#      rust: nightly
 
 before_install:
   - set -e
@@ -76,7 +47,7 @@ deploy:
   api_key:
     secure: RPi5heDvBOmPFx9zAxI0IngmprsLL5ArErXhEaFh4e+C4CtZbyG9jTJrDta3DWKTLtmGBvbXSxF1UL/cUyBPXVBCS1I1ENenvoB7rshik9UG0m/NMMODaq+x1+vFY1hykuO+HmwQSd4wCDcfRE+xcA8q7dmXQc74EbWNdOUfRWEnY2bhqeVtunnDjR1CTKBHRxlfm66dLdzXXx7t0HjQvoGd6ef3DfT3sCQJ5SX2FCxXTff0Bg6XXacIQb5ikTUgeG2YMUNqpn5tkt3see7lI61kXIQUliEBlHzhNL3GYOAuR24+qCkzi7WTlSj1wtmOBDYtYADpQ0k5ZxYXauT5obPCH0tJJFUjOOHNNSX+zXgYSRZCH3y/kfT/JXZZsOy3YlmhtJAuT9gpgtbGKHvCuhRVzMOEw2At/dpekv4hW4oUTwE6XZChYfdKVBMn2VvwHeccLtB4hotVCy0kODA2HUWGU2KxErQIFhCSHWQooIJG/guDzeQcohhJbm/DTi4nv0zlVYKoq44rIgQODzP4UfVqEkyO6+NuIzPiMrhoZK5DRkHKoBg44co5nWoJoNS6r3j6YyHEwFoOA4loRRBZtfq+JOp2D0q2jAViCbq/iNDd+6gFRoWobsXIAi91ezyRuVfmCtaxfm7eXTdrfklXU87ZPLnz8qFrc1FmIzx6cfs=
   file_glob: true
-  file: $CRATE_NAME-$TRAVIS_TAG-$TARGET.*
+  file: $CRATE_NAME-$TRAVIS_TAG-$TARGET_NICE.*
   on:
     # TODO Here you can pick which targets will generate binary releases
     # In this example, there are some targets that are tested using the stable
