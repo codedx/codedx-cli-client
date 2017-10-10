@@ -11,7 +11,7 @@ environment:
   # don't need
   matrix:
     - TARGET: x86_64-pc-windows-gnu
-      TARGET_NICE: windows
+      TARGET_NICE: windows_x86_64
 
     # MSVC is the dynamically-linked version, and requires you to have visual studio installed.
     # The resulting executable is smaller, but less portable.
