@@ -22,6 +22,14 @@ $> ./codedx-client https://localhost/codedx --api-key 8e218b38-fcdd-453d-8f78-18
 codedx>
 ```
 
+The program reads input from `STDIN`, so you can pipe the contents of a file to it, to run several commands in sequence.
+Each line of the file will be interpreted as a command. 
+When using this mode, you may wish to provide the `--no-prompt` flag to prevent the program from writing stuff like "codedx>" to `STDOUT`.
+
+```text
+$> ./codedx-client https://localhost/codedx --api-key 8e218b38-fcdd-453d-8f78-185f7d1d9fa7 --no-prompt < ./my-commands.txt
+```
+
 Once in the REPL, type `help` (and hit Enter) for a list of commands.
 You can exit the REPL by typing `exit` or `quit`, or with <kbd>Ctrl+C</kbd> or sending an EOF signal.
 You can learn more about a command by typing `help <command name>` e.g. `help analyze`.
