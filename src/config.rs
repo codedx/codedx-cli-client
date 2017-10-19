@@ -2,9 +2,6 @@ extern crate clap;
 extern crate reqwest;
 extern crate url;
 
-/// gets us the header! macro
-//#[macro_use] extern crate hyper;
-
 use clap::{Arg, ArgMatches, App};
 use reqwest::{RequestBuilder};
 use url::Url;
@@ -61,7 +58,7 @@ impl ClientConfig {
         where F: for<'b> FnOnce(App<'a, 'b>) -> ArgMatches<'a>
     {
         let app = App::new("codedx-client")
-            .version("0.1.0")
+            .version(crate_version!())
             .about("CLI client for the Code Dx REST API")
             .arg(Arg::with_name("base-url")
                 .short("b")

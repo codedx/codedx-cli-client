@@ -1,8 +1,8 @@
-extern crate clap;
 extern crate reqwest;
 extern crate serde;
 extern crate url;
 
+#[macro_use] extern crate clap;
 #[macro_use] extern crate hyper;
 #[macro_use] extern crate nom;
 #[macro_use] extern crate serde_json;
