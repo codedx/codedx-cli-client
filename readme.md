@@ -13,12 +13,12 @@ The program runs as a [REPL](https://en.wikipedia.org/wiki/Read%E2%80%93eval%E2%
 Start it by providing the connection information (Code Dx "base url", and username+password or API Key):
 
 ```text
-$> ./codedx-client https://localhost/codedx -u johndoe -p supersecret
+$> ./codedx-client -b https://localhost/codedx -u johndoe -p supersecret
 codedx>
 ```
 
 ```text
-$> ./codedx-client https://localhost/codedx --api-key 8e218b38-fcdd-453d-8f78-185f7d1d9fa7
+$> ./codedx-client -b https://localhost/codedx --api-key 8e218b38-fcdd-453d-8f78-185f7d1d9fa7
 codedx>
 ```
 
@@ -27,7 +27,7 @@ Each line of the file will be interpreted as a command.
 When using this mode, you may wish to provide the `--no-prompt` flag to prevent the program from writing stuff like "codedx>" to `STDOUT`.
 
 ```text
-$> ./codedx-client https://localhost/codedx --api-key 8e218b38-fcdd-453d-8f78-185f7d1d9fa7 --no-prompt < ./my-commands.txt
+$> ./codedx-client -b https://localhost/codedx --api-key 8e218b38-fcdd-453d-8f78-185f7d1d9fa7 --no-prompt < ./my-commands.txt
 ```
 
 Once in the REPL, type `help` (and hit Enter) for a list of commands.
