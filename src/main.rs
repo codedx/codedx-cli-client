@@ -1,4 +1,5 @@
 extern crate reqwest;
+extern crate rpassword;
 extern crate serde;
 extern crate url;
 
@@ -32,7 +33,7 @@ fn main(){
         },
         Err(ConfigError::MissingAuth) => println!("Authorization info missing or incomplete. Either an API Key or a Username + Password must be provided"),
         Err(ConfigError::MissingUrl) => println!("Missing the Base URL"),
-        Err(ConfigError::InvalidUrl) => println!("Invalid Base URL"),
+        Err(ConfigError::InvalidUrl) => println!("Invalid Base URL. Did you forget 'http://' or 'https://' ?"),
     }
 }
 

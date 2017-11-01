@@ -4,6 +4,7 @@ extern crate url;
 
 use clap::{Arg, ArgMatches, App};
 use reqwest::{RequestBuilder};
+use rpassword;
 use url::Url;
 
 /// Connection information for Code Dx.
@@ -63,10 +64,11 @@ impl ClientConfig {
             .arg(Arg::with_name("base-url")
                 .short("b")
                 .long("base-url")
-                .value_name("VALUE")
+                .value_name("BASE URL")
                 .help("Code Dx base url (e.g. 'https://localhost/codedx')")
                 .takes_value(true)
                 .required(true)
+                .index(1)
             )
             .arg(Arg::with_name("username")
                 .short("u")
@@ -101,29 +103,45 @@ impl ClientConfig {
             );
         let matches = get_matches(app);
 
+        // parse the base-url as a URI, then attempt to access the `path_segments_mut` to
+        // ensure that will work once we pass the base url to the api client code.
         let base_uri = match matches.value_of("base-url") {
             None => Err(ConfigError::MissingUrl),
-            Some(raw) => Url::parse(raw).map_err(|_| ConfigError::InvalidUrl),
+            Some(raw) => Url::parse(raw).map_err(|_| ConfigError::InvalidUrl).and_then(|mut url| {
+                let url_seems_ok = {
+                    let url_segments = url.path_segments_mut();
+                    match url_segments {
+                        Ok(_) => Ok(()),
+                        Err(_) => Err(ConfigError::InvalidUrl),
+                    }
+                };
+                url_seems_ok.map(|_| url)
+            }),
         };
-
-        let client_auth_info = match matches.value_of("api-key") {
-            Some(key) => Ok(ClientAuth::ApiKey(String::from(key))),
-            None => {
-                let username = matches.value_of("username").map(String::from);
-                let password = matches.value_of("password").map(String::from);
-                let foo = username.and_then(|u| {
-                    password.map(|p| {
-                        ClientAuth::Basic{ username: u, password: p }
-                    })
-                });
-                foo.ok_or_else(|| ConfigError::MissingAuth)
-            },
-        };
-
-        let insecure = matches.is_present("insecure");
-        let no_prompt = matches.is_present("no-prompt");
 
         base_uri.and_then(|uri| {
+
+            // interpret the authentication values
+            let client_auth_info = match matches.value_of("api-key") {
+                Some(key) => Ok(ClientAuth::ApiKey(String::from(key))),
+                None => {
+                    let username = matches.value_of("username").map(String::from);
+                    let password = matches.value_of("password").map(String::from);
+                    let foo = username.and_then(|u| {
+                        password.or_else(|| {
+                            // prompt for the password without actually showing what the user types
+                            rpassword::prompt_password_stdout("password: ").ok()
+                        }).map(|p| {
+                            ClientAuth::Basic{ username: u, password: p }
+                        })
+                    });
+                    foo.ok_or_else(|| ConfigError::MissingAuth)
+                },
+            };
+
+            let insecure = matches.is_present("insecure");
+            let no_prompt = matches.is_present("no-prompt");
+
             client_auth_info.map(|auth| {
                 ClientConfig {
                     base_url: uri,
