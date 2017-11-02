@@ -7,9 +7,9 @@ This is a utility intended to make it easier to interact with
 
 Currently only a couple API actions are supported, but more may come with demand (or with pull requests!)
 
- - [Usage](#Usage)
-   - [`analyze`](#Command-analyze)
-   - [`projects`](#Command-projects)
+ - [Usage](#usage)
+   - [`analyze`](#command-analyze)
+   - [`projects`](#command-projects)
 
 # Usage
 
