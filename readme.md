@@ -54,7 +54,7 @@ where each line of the file is interpreted as a command.
 If you wish to do this, you may also want to use the `--no-prompt` flag to prevent the program from writing stuff like "codedx>" to `STDOUT`.
 
 ```text
-$> ./codedx-client -b https://localhost/codedx --api-key 8e218b38-fcdd-453d-8f78-185f7d1d9fa7 --no-prompt < ./my-commands.txt
+$> ./codedx-client https://localhost/codedx --api-key 8e218b38-fcdd-453d-8f78-185f7d1d9fa7 --no-prompt < ./my-commands.txt
 ```
 
 ## About REPL Mode
@@ -74,6 +74,26 @@ Note that you can usually get around needing to escape anything by being clever:
 
 If you see an error message like "The filename, directory name, or volume label syntax is incorrect.",
 you likely used backslashes (`\`) without escaping them (`\\`) inside a quoted argument.
+
+## Arguments and Options
+
+```text
+$> ./codedx-client <BASE URL> [OPTIONS] [<command...>]
+```
+
+ - `BASE URL` The "base" URL where you can browser to Code Dx, e.g. `https://localhost/codedx`
+ - `-u, --usename <USERNAME>`  Specify the username you want to use (basic auth). 
+   With `-u`, you don't actually need the space, i.e. `-u johndoe` is the same as `-ujohndoe`.
+ - `-p, --password <PASSWORD>` Specify the password you want to use (basic auth).
+   With `-p`, you don't actually need the space, i.e. `-p supersecret` is the same as `-psupersecret`.
+   A password is required if you choose to authenticate with basic auth, but you can omit it here
+   to make the program prompt for your password later.
+ - `-k, --api-key <KEY>` Specify an API Key to use for authentication, instead of username+password.
+ - `--insecure` If provided, `https` requests will ignore certificate hostname validation.
+   This option *does not* disable the certificate trust chain; your system still needs to trust 
+   Code Dx's SSL certificate.
+ - `--no-prompt` If provided, the program will avoid writing prompts like `codedx>` to `STDOUT`.
+   This option is helpful if you want to parse the output of the application.
 
 # Command: `analyze`
 
