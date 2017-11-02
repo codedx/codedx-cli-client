@@ -9,15 +9,14 @@ extern crate url;
 #[macro_use] extern crate serde_json;
 #[macro_use] extern crate serde_derive;
 
-use clap::{Arg, ArgMatches, App, AppSettings, SubCommand};
-use std::collections::HashMap;
+use clap::{ArgMatches, App, AppSettings};
 use std::io;
 use std::io::Write;
-use std::path::Path;
-use std::time::Duration;
 
 mod config;
 use config::*;
+
+mod commands;
 
 mod client;
 use client::*;
@@ -91,69 +90,26 @@ fn run_repl(client: ApiClient) {
                         }
                     },
                     Ok(arg_matches) => {
-                        match ReplCommand::from(&arg_matches) {
-                            Ok(ReplCommand::Exit) => break,
-                            Ok(ReplCommand::Analyze{ project_id, files, name }) => {
+                        let command_runner = CommandRunner(commands::all());
+                        let stuff = command_runner.maybe_run(&arg_matches, &client);
+                        // TODO: interpret the result (and give it a better name)
 
-                                // no matter what, start the analysis
-                                let mut analysis_response: ApiResult<ApiAnalysisJobResponse> = client
-                                    .start_analysis(project_id, files)
-                                    .map(|resp| {
-                                        println!("# Started analysis {} with job id {}", resp.analysis_id, resp.job_id);
-                                        resp
-                                    });
-
-                                // if a name was specified, tell the server to set the name
-                                if let Some(name) = name {
-                                    analysis_response = analysis_response.and_then(|analysis_job_response| {
-                                        let analysis_id = analysis_job_response.analysis_id;
-
-                                        client.set_analysis_name(project_id, analysis_id, name)
-                                            .map(|_| {
-                                                println!("# Set analysis {}'s name to \"{}\"", analysis_id, name);
-                                                analysis_job_response
-                                            })
-                                    });
-                                }
-
-                                let analysis_result_status = analysis_response
-                                    .and_then(|analysis_job_response| {
-                                        let job_id = analysis_job_response.job_id;
-                                        client.poll_job_completion(&job_id, Duration::from_secs(2))
-                                    });
-
-                                match analysis_result_status {
-                                    Err(e) => eprintln!("Error during analysis: {:?}", e),
-                                    Ok(status) => {
-                                        println!("# Polling done");
-                                        println!("{:?}", status);
-                                    },
-                                }
+                        match stuff {
+                            None => {
+                                println!("Invalid command.");
+                                println!("Try again.");
                             },
-
-                            // PROJECTS
-                            Ok(ReplCommand::Projects{ filter }) => {
-                                let plist = match filter {
-                                    Some(ref filter) => client.query_projects(filter),
-                                    None => client.get_projects(),
-                                };
-                                match plist {
-                                    Err(e) => eprintln!("Error loading projects: {:?}", e),
-                                    Ok(projects) => {
-                                        for project in projects {
-                                            println!("{}", serde_json::to_string(&project).unwrap());
-                                        }
-                                    }
-                                };
-                            }
-
-                            // ERROR
-                            Err(msg) => {
-                                println!("{}", msg);
-                                println!("try again");
+                            Some(Err(msg)) => {
+                                println!("Invalid arguments for command: {}", msg);
+                                println!("Try again.");
+                            },
+                            Some(Ok(Err(commands::Exit(code)))) => {
+                                std::process::exit(code);
+                            },
+                            Some(Ok(Ok(()))) => {
+                                // command ran without issue
                             }
                         }
-
                     },
                 };
             }
@@ -166,130 +122,30 @@ fn run_repl(client: ApiClient) {
     }
 }
 
-/// Enumeration of REPL capabilities.
-///
-/// Members of this enum represent commands that can be input to the REPL,
-/// which will be acted upon as part of the loop.
-///
-/// The reference lifetime corresponds to the lifetime of the `ArgMatches`
-/// reference used to interpret the command.
-#[derive(Debug)]
-enum ReplCommand<'a> {
-    Analyze {
-        project_id: u32,
-        files: Vec<&'a Path>,
-        name: Option<&'a str>
-    },
-    Projects {
-        filter: Option<ApiProjectFilter<'a>>
-    },
-    Exit,
-}
-impl <'a> ReplCommand<'a> {
-    fn from(matches: &'a ArgMatches) -> Result<ReplCommand<'a>, &'a str> {
-        // EXIT
-        if let Some(_) = matches.subcommand_matches("exit"){
-            Ok(ReplCommand::Exit)
-
-        // ANALYZE
-        } else if let Some(analyze_args) = matches.subcommand_matches("analyze") {
-            // get the project id
-            let project_id: u32 = analyze_args.value_of("project-id")
-                .ok_or("project id missing")?
-                .parse().map_err(|_| "project-id should be a number")?;
-            // get the list of files
-            let files = analyze_args.values_of("file")
-                .ok_or("must specify at least one file to analyze")?
-                .map(|file| Path::new(file))
-                .collect();
-            // optional name for the analysis
-            let name = analyze_args.value_of("name");
-            Ok(ReplCommand::Analyze { project_id, files, name })
-
-        // PROJECTS
-        } else if let Some(project_args) = matches.subcommand_matches("projects") {
-            let mut metadatas = HashMap::new();
-            for mut metadata_values in project_args.values_of("metadata") {
-                while let Some(k) = metadata_values.next() {
-                    let v = metadata_values.next().ok_or("metadata must be given as key value pairs")?;
-                    metadatas.insert(k, v);
-                }
-            }
-            let name = project_args.value_of("name");
-            if metadatas.is_empty() && name.is_none() {
-                Ok(ReplCommand::Projects { filter: None })
-            } else {
-                let metadatas_opt = if metadatas.is_empty() { None } else { Some(metadatas) };
-                Ok(ReplCommand::Projects {
-                    filter: Some(ApiProjectFilter{ name, metadata: metadatas_opt })
-                })
-            }
-
-        // <anything else>
-        } else {
-            Err("unknown command")
-        }
-    }
-}
-
 /// Get a copy of the "App" for the internal REPL.
 ///
 /// Note that since some of the methods we want to use on it will "consume" it,
 /// we need to be able to easily get copies of the whole App for convenience.
 fn repl_app() -> App<'static, 'static> {
-    App::new("Code Dx API Client")
+    let mut app = App::new("Code Dx API Client")
         .bin_name("")
         .version("2.6.1")
         .setting(AppSettings::VersionlessSubcommands)
-        .setting(AppSettings::ColoredHelp)
-        .subcommand(SubCommand::with_name("exit")
-            .alias("quit")
-            .about("Exit this program ('quit' works too)")
-        )
-        .subcommand(SubCommand::with_name("analyze")
-            .about("Analyze some files")
-            .arg(Arg::with_name("project-id")
-                .short("p")
-                .long("project-id")
-                .value_name("ID")
-                .required(true)
-                .takes_value(true)
-            )
-            .arg(Arg::with_name("name")
-                .short("n")
-                .long("name")
-                .value_name("NAME")
-                .takes_value(true)
-                .required(false)
-            )
-            .arg(Arg::with_name("file")
-                .short("f")
-                .long("file")
-                .value_name("FILE")
-                .takes_value(true)
-                .multiple(true)
-                .required(true)
-            )
-        )
-        .subcommand(SubCommand::with_name("projects")
-            .about("Get a list of projects")
-            .arg(Arg::with_name("name")
-                .short("n")
-                .long("name")
-                .value_name("PART_OF_NAME")
-                .help("Provide criteria by case-insensitive name matching")
-                .takes_value(true)
-                .required(false)
-            )
-            .arg(Arg::with_name("metadata")
-                .short("m")
-                .long("metadata")
-                .number_of_values(2)
-                .value_names(&["FIELD", "VALUE"])
-                .help("Provide criteria by project metadata")
-                .multiple(true)
-                .required(false)
-            )
-        )
+        .setting(AppSettings::ColoredHelp);
 
+    for command in commands::all() {
+        app = app.subcommand(command.as_subcommand());
+    }
+    app
+}
+
+struct CommandRunner<'a>(Vec<Box<commands::Command<'a>>>);
+impl <'a> CommandRunner<'a> {
+    fn maybe_run<'b>(&self, arg_matches: &'a ArgMatches, client: &'b ApiClient) -> Option<Result<commands::CommandResult, &'a str>> {
+        let foo = self.0.iter().filter_map(|command_box| {
+            let cmd = command_box.as_ref();
+            cmd.maybe_run(arg_matches, client)
+        }).next();
+        foo
+    }
 }
