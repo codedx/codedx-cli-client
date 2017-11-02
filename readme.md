@@ -109,22 +109,25 @@ The `analyze` command takes care of several actions for you:
 
 ## Arguments and Options
 
- - `-p, --project-id <ID>` Specify which Code Dx project you want to upload files to, by its ID.
+```text
+analyze [OPTIONS] <PROJECT ID> <FILE(S)...>
+```
+
+ - `-n, --name <NAME>` Optionally specify a name for the analysis.
+ - `<PROJECT ID>` Specify which Code Dx project you want to upload files to, by its ID.
    (Note: you can find a project's ID using the [`projects`](#command-projects) command,
    or finding the number in the URL when you visit that project in a browser)
- - `-n, --name <NAME>` Optionally specify a name for the analysis.
- - `-f, --file <FILE(S)>` Specify the path to one or more files that you wish to upload.
-   Each file is a separate argument, but you only need to give the `-f` flag once.
-
-You *must* provide a project ID, and at least one file.
+ - `<FILE(S)>` Specify the path to one or more files that you wish to upload.
+   Each file is a separate argument, separated by a space.
 
 ## Example
 
 Suppose I want analyze my "WebGoat" project, which happens to have an ID of `5`:
 
 ```text
-codedx> analyze -p 5 -f "/path/to/workspace/webgoat-source.zip" "/path/to/workspace/webgoat-classes.zip"
+codedx> analyze -n "Hello Analysis" 5 "/path/to/workspace/webgoat-source.zip" "/path/to/workspace/webgoat-classes.zip"
 # Started analysis 77 with job id f2f3b8c3-9a2c-4446-9765-e99a6d47e69e
+# Set analysis 77's name to "Hello Analysis"
 # Polling job completion, iteration 1: status = Running
 ...omitted for brevity...
 # Polling job completion, iteration 13: status = Running
@@ -138,7 +141,11 @@ The `projects` command helps you get a list of all Code Dx projects, or search f
 
 ## Arguments and Options
 
- - *no arguments* - Prints a list of all Code Dx projects that you have at least read access to.
+```text
+projects [OPTIONS]
+```
+
+ - *if no options* - Prints a list of all Code Dx projects that you have at least read access to.
  - `-n, --name <PART OF NAME>` - If this flag is given, it adds search criteria such that matching
    projects include `<PART OF NAME>` in their name (case insensitive).
  - `-m, --metadata <FIELD> <VALUE>` - If this flag is given, it should be followed a key-value
