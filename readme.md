@@ -48,6 +48,16 @@ Welcome to the Code Dx CLI Client REPL.
 codedx>
 ```
 
+To run a command in *one-shot mode*, enter that command and its arguments as part of the same command you would use to start *REPL mode*.
+
+```text
+$> ./codedx-client https://localhost/codedx -u johndoe projects -n "WebGoat"
+password:
+{"id":5,"name":"WebGoat Java","parentId":null}
+{"id":8,"name":"WebGoat.NET","parentId":null}
+$>
+```
+
 If you wish to run several commands at once, it's easiest to write a shell script or batch file,
 but you can also pipe the commands into the program's *REPL mode* from a file,
 where each line of the file is interpreted as a command.
