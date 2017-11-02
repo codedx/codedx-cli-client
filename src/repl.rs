@@ -1,5 +1,3 @@
-//#[macro_use] extern crate nom;
-
 use std;
 use std::str;
 use std::str::FromStr;

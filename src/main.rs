@@ -9,38 +9,77 @@ extern crate url;
 #[macro_use] extern crate serde_json;
 #[macro_use] extern crate serde_derive;
 
+mod client;
+mod commands;
+mod config;
+mod repl;
+
 use clap::{ArgMatches, App, AppSettings};
 use std::io;
 use std::io::Write;
 
-mod config;
 use config::*;
-
-mod commands;
-
-mod client;
 use client::*;
-
-mod repl;
 use repl::CmdArgs;
 
 fn main(){
-    match ClientConfig::from_cli_args() {
+    let app = {
+        let mut base_app = config::get_base_app();
+        for command in commands::all() {
+            base_app = base_app.subcommand(command.as_subcommand());
+        }
+        base_app
+    };
+    let matches = app.get_matches();
+
+    match ClientConfig::from_matches(&matches) {
         Ok(config) => {
             let client = ApiClient::new(Box::new(config));
-            run_repl(client);
+            if let (_, Some(_)) = matches.subcommand() {
+                run_oneoff(client, &matches);
+            } else {
+                if !client.get_config().no_prompt {
+                    println!("Welcome to the Code Dx CLI Client REPL.");
+                    println!("In the REPL, you can enter commands without having to provide the Code Dx base url or credentials each time.");
+                    println!("If this wasn't what you expected, make sure to include a command when running this program from the command line.");
+                    println!("For a list of commands, type 'help'. To exit, type 'exit'");
+                    println!();
+                }
+                run_repl(client);
+            }
         },
-        Err(ConfigError::MissingAuth) => println!("Authorization info missing or incomplete. Either an API Key or a Username + Password must be provided"),
-        Err(ConfigError::MissingUrl) => println!("Missing the Base URL"),
-        Err(ConfigError::InvalidUrl) => println!("Invalid Base URL. Did you forget 'http://' or 'https://' ?"),
+        Err(ConfigError::MissingAuth) => eprintln!("Authorization info missing or incomplete. Either an API Key or a Username + Password must be provided"),
+        Err(ConfigError::MissingUrl) => eprintln!("Missing the Base URL"),
+        Err(ConfigError::InvalidUrl) => eprintln!("Invalid Base URL. Did you forget 'http://' or 'https://' ?"),
     }
 }
 
-/// Main program loop.
+/// Run a single command based on the `arg_matches`.
 ///
-/// Prompts for a command from stdin, then attempts to interpret it as a `ReplCommand` and execute it.
+/// This function will be called when the main `App` matches a subcommand.
+/// The subcommand will be run, and the program will exit immediately afterward.
+fn run_oneoff<'a>(client: ApiClient, arg_matches: &ArgMatches<'a>) -> ! {
+    let command_runner = CommandRunner(commands::all());
+
+    let exit_code = match command_runner.maybe_run(&arg_matches, &client) {
+        CommandRunnerResult::Done => 0,
+        CommandRunnerResult::RequestedExit(code) => code,
+        CommandRunnerResult::UnknownCommand => {
+            eprintln!("Unknown command.");
+            -1
+        },
+        CommandRunnerResult::InvalidArguments(msg) => {
+            eprintln!("Invalid arguments for command: {}", msg);
+            -2
+        },
+    };
+
+    std::process::exit(exit_code);
+}
+
+/// Repeatedly prompt for- and execute- commands.
 ///
-/// Repeats until an EOF or the "exit" command are encountered.
+/// The loop ends when the "exit" command is run, or when STDIN reaches an EOF.
 fn run_repl(client: ApiClient) {
     loop {
         // friendly prompt
@@ -76,49 +115,31 @@ fn run_repl(client: ApiClient) {
                         match e.kind {
                             clap::ErrorKind::HelpDisplayed => {
                                 // repl_app().print_help().unwrap();
-                                e.write_to(&mut io::stdout()).unwrap();
-                                println!("\n");
+                                e.write_to(&mut io::stderr()).unwrap();
+                                eprintln!("\n");
                             },
                             clap::ErrorKind::VersionDisplayed => {
-                                //repl_app().write_version(&mut io::stdout()).unwrap();
-                                println!("\n");
+                                eprintln!("\n");
                             }
                             _ => {
-                                e.write_to(&mut io::stdout()).unwrap();
-                                println!("\n");
+                                e.write_to(&mut io::stderr()).unwrap();
+                                eprintln!("\n");
                             },
                         }
                     },
                     Ok(arg_matches) => {
                         let command_runner = CommandRunner(commands::all());
-                        let stuff = command_runner.maybe_run(&arg_matches, &client);
-                        // TODO: interpret the result (and give it a better name)
 
-                        match stuff {
-                            None => {
-                                println!("Invalid command.");
-                                println!("Try again.");
-                            },
-                            Some(Err(msg)) => {
-                                println!("Invalid arguments for command: {}", msg);
-                                println!("Try again.");
-                            },
-                            Some(Ok(Err(commands::Exit(code)))) => {
-                                std::process::exit(code);
-                            },
-                            Some(Ok(Ok(()))) => {
-                                // command ran without issue
-                            }
+                        match command_runner.maybe_run(&arg_matches, &client) {
+                            CommandRunnerResult::UnknownCommand => eprintln!("Unknown command; try again."),
+                            CommandRunnerResult::InvalidArguments(msg) => eprintln!("Invalid arguments for command: {}\nTry again.", msg),
+                            CommandRunnerResult::RequestedExit(code) => std::process::exit(code),
+                            CommandRunnerResult::Done => (),
                         }
                     },
                 };
             }
         }
-
-    }
-
-    if !client.get_config().no_prompt {
-        println!("bye");
     }
 }
 
@@ -139,13 +160,35 @@ fn repl_app() -> App<'static, 'static> {
     app
 }
 
+/// Wrapper for a collection of `Command`s.
+///
+/// Its purpose is to run the first command that matches some given `arg_matches`, returning that command's result.
+/// It exposes the result as a friendly enum, `CommandRunnerResult`.
 struct CommandRunner<'a>(Vec<Box<commands::Command<'a>>>);
 impl <'a> CommandRunner<'a> {
-    fn maybe_run<'b>(&self, arg_matches: &'a ArgMatches, client: &'b ApiClient) -> Option<Result<commands::CommandResult, &'a str>> {
-        let foo = self.0.iter().filter_map(|command_box| {
+    fn maybe_run<'b>(&self, arg_matches: &'a ArgMatches, client: &'b ApiClient) -> CommandRunnerResult<'a> {
+        let raw_result = self.0.iter().filter_map(|command_box| {
             let cmd = command_box.as_ref();
             cmd.maybe_run(arg_matches, client)
         }).next();
-        foo
+        raw_result.into()
+    }
+}
+
+/// Result of attempting to run the first applicable command on some `ArgMatches`.
+enum CommandRunnerResult<'a> {
+    Done,
+    UnknownCommand,
+    InvalidArguments(&'a str),
+    RequestedExit(i32),
+}
+impl <'a> From<Option<Result<commands::CommandResult, &'a str>>> for CommandRunnerResult<'a> {
+    fn from(result: Option<Result<commands::CommandResult, &'a str>>) -> Self {
+        match result {
+            Some(Ok(Ok(()))) => CommandRunnerResult::Done,
+            Some(Ok(Err(commands::Exit(code)))) => CommandRunnerResult::RequestedExit(code),
+            Some(Err(msg)) => CommandRunnerResult::InvalidArguments(msg),
+            None => CommandRunnerResult::UnknownCommand,
+        }
     }
 }
