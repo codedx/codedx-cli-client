@@ -26,6 +26,13 @@ You only have to enter the connection information once, up front; each command w
 The required connection information includes the "base url" where you browse Code Dx,
 and the information you use to log in (username+password, or an API Key).
 
+Note: When connecting to Code Dx over https, Linux/Unix users will need to specify the path to the certificate trust store:
+
+```sh
+# note: this path may vary by machine - make sure you pick the right path for you!
+export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+```
+
 ```text
 $> ./codedx-client https://localhost/codedx -u johndoe -p supersecret
 Welcome to the Code Dx CLI Client REPL.
@@ -192,3 +199,28 @@ For regular (plain text entry) fields, you can just give part of the value for i
 codedx> projects -m Owner jo -m Visibility high
 {"id":4,"name":"Yet another","parentId":3}
 ```
+
+# Troubleshooting
+
+## Certificate verification errors
+
+At the time or writing this, there are two cases where you might see a certificate verification error when running the CLI:
+
+1. **The CLI doesn't know where to find your certificate trust store.**  
+   
+   A good litmus test for this case is pointing the CLI at `https://www.google.com` instead of your Code Dx server. 
+   If you still get a certificate verification error with that address, the CLI won't trust anyone over HTTPS.
+   To solve this, set the following environment variable:
+   
+   ```sh
+   export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+   ```
+   
+   Note that the path and filename may vary depending on your system. 
+   
+2. **Your system doesn't trust Code Dx's SSL certificate.**
+   Code Dx's installer sets up a self-signed certificate in order to run HTTPS, but it can't know the domain name you'll ultimately use it with.
+   
+   To get around this, you'll need to [set that certificate as trusted](https://help.ubuntu.com/community/OpenSSL#Importing_a_Certificate_into_the_System-Wide_Certificate_Authority_Database), and use the `--insecure` flag when running the CLI to disable hostname verification.  
+   
+   Alternatively, you could replace the auto-generated certificate with one of your own which is already trusted.
