@@ -25,6 +25,7 @@ extern crate url;
 #[macro_use] extern crate serde_json;
 #[macro_use] extern crate serde_derive;
 
+mod branching;
 mod client;
 mod commands;
 mod config;
@@ -180,7 +181,7 @@ fn repl_app() -> App<'static, 'static> {
 ///
 /// Its purpose is to run the first command that matches some given `arg_matches`, returning that command's result.
 /// It exposes the result as a friendly enum, `CommandRunnerResult`.
-struct CommandRunner<'a>(Vec<Box<commands::Command<'a>>>);
+struct CommandRunner<'a>(Vec<Box<dyn commands::Command<'a>>>);
 impl <'a> CommandRunner<'a> {
     fn maybe_run<'b>(&self, arg_matches: &'a ArgMatches, client: &'b ApiClient) -> CommandRunnerResult<'a> {
         let raw_result = self.0.iter().filter_map(|command_box| {
