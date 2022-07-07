@@ -256,7 +256,7 @@ impl <'a> CommandInner<'a> for AnalyzeCommand {
             if include_git_source || git_branch_name.is_some() {
                 client.start_analysis_with_git(project_context.clone(), branch_name, include_git_source, git_branch_name, files)
                     .and_then(|resp| {
-                        println!("Requesting new analysis with job id {} with included git source", resp.job_id);
+                        println!("# Requesting new analysis with job id {} with included git source", resp.job_id);
                         client.poll_job_completion(&resp.job_id, Duration::from_secs(2))?;
                         client.get_job_result(&resp.job_id).map(|result| {
                             println!("# Started analysis {} with job id {} with included git source", result.analysis_id, resp.job_id);

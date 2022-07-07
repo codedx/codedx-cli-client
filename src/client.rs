@@ -336,10 +336,7 @@ impl ApiClient {
     }
 
     pub fn start_analysis(&self, project_context: ProjectContext, branch_name: Option<String>, files: Vec<&Path>) -> ApiResult<ApiAnalysisJobResponse> {
-        let branch_name_string = match branch_name {
-            Some(name) => name,
-            None => "".to_string()
-        };
+        let branch_name_string = branch_name.unwrap_or_default();
         let form = files
             .iter()
             .enumerate()
@@ -361,15 +358,8 @@ impl ApiClient {
     }
 
     pub fn start_analysis_with_git(&self, project_context: ProjectContext, branch_name: Option<String>, include_git_source: bool, git_branch_name: Option<String>, files: Vec<&Path>) -> ApiResult<ApiAnalysisWithGitSourceJobResponse> {
-        let branch_name_string = match branch_name {
-            Some(name) => name,
-            None => "".to_string()
-        };
-
-        let git_branch_name_string = match git_branch_name {
-            Some(name) => name,
-            None => "".to_string()
-        };
+        let branch_name_string = branch_name.unwrap_or_default();
+        let git_branch_name_string = git_branch_name.unwrap_or_default();
 
         let form = files
             .iter()

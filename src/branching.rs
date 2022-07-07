@@ -9,22 +9,16 @@ impl <'a> BranchSpec {
     pub fn parse(branch_spec_input: String) -> Result<BranchSpec, &'a str> {
         let branch_spec_string = branch_spec_input.to_string();
         if branch_spec_string.starts_with("branchId=") {
-            let split_branch_id= branch_spec_string.split_once('=');
-            match split_branch_id {
-                Some(("branchId", id)) => {
-                    let branch_id: u32 = id
-                        .parse::<u32>()
-                        .map_err(|_| "project-id should be a number")?;
-                        Ok(BranchSpec::ByBranchId(branch_id))
-                }
-                _ => { Err("branch-id cannot be empty") }
-            }
+            if let Some(("branchId", id)) = branch_spec_string.split_once('=') {
+                id
+                    .parse::<u32>()
+                    .map_err(|_| "project-id should be a number")
+                    .and_then(|branch_id| Ok(BranchSpec::ByBranchId(branch_id)))
+            } else { Err("branch-id cannot be empty") }
         } else if branch_spec_string.starts_with("branch=") {
-            let split_branch_name= branch_spec_string.split_once('=');
-            match split_branch_name {
-                Some(("branch", name)) => Ok(BranchSpec::ByBranchName(name.to_string())),
-                _ => { Err("branch-name cannot be empty") }
-            }
+            if let Some(("branch", name)) = branch_spec_string.split_once('=') {
+                Ok(BranchSpec::ByBranchName(name.to_string()))
+            } else { Err("branch-name cannot be empty") }
         } else { Err("Must contain branch or branchId identifier.") }
     }
 }
@@ -37,7 +31,7 @@ pub struct ProjectContext {
 }
 impl <'a> ProjectContext {
     pub fn parse(project_context_input: &'a str) -> Result<ProjectContext, &'a str> {
-        let input = project_context_input.to_string();
+        let input = project_context_input;
         if !input.contains(';') {
             let project_id = input.parse::<u32>().map_err(|_| "project id should be a number")?;
             Ok(ProjectContext { project_id, branch_spec: None, api_string: project_id.to_string() })
