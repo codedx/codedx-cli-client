@@ -131,13 +131,17 @@ analyze [OPTIONS] <PROJECT ID> <FILE(S)...>
 ```
 
  - `-n, --name <NAME>` Optionally specify a name for the analysis.
- - `<PROJECT ID>` Specify which Code Dx project you want to upload files to, by its ID.
-   (Note: you can find a project's ID using the [`projects`](#command-projects) command,
-   or finding the number in the URL when you visit that project in a browser)
+ - `-g, --include-git-source` Flag for including configured git source in the analysis.
+ - `--git-branch-name <GIT BRANCH NAME>` Git target branch name.
+ - `--branch-name <BRANCH NAME>` Code Dx target branch name. If a branch of that name does not exist off of the given project context, a new one will
+   be created.
+ - `<PROJECT CONTEXT>` Specify which Code Dx project or project context you want to upload files to. Project context should be in the form of `<project-id>`, `<project-
+   id>;branchId=<branch-id>`, or `<project-id>;branch=<branch-name>` (Note: you can find a project's ID using the [`projects`](#command-projects) command,
+   or finding the number in the URL when you visit that project in a browser and branch names/IDs can be found using the [`branches`](#command-projects) command).
  - `<FILE(S)>` Specify the path to one or more files that you wish to upload.
    Each file is a separate argument, separated by a space.
 
-## Example
+## Examples
 
 Suppose I want analyze my "WebGoat" project, which happens to have an ID of `5`:
 
@@ -150,6 +154,28 @@ codedx> analyze -n "Hello Analysis" 5 "/path/to/workspace/webgoat-source.zip" "/
 # Polling job completion, iteration 13: status = Running
 # Polling done
 Completed
+```
+
+Now, suppose I want to run an analysis on this same project but not on its default branch. 
+I use the `branches` command to view a list of branches and identify the name or ID of the desired branch. 
+Let's say the desired branch has an ID of 7 and is named "feature". I then use this to construct the following project context: `5;branchId=7`
+if building the context by branch ID, or `5;branch=feature` if building the context by name.
+
+```text
+codedx> analyze -n "Hello Analysis" 5;branchId=7 "/path/to/workspace/webgoat-source.zip" "/path/to/workspace/webgoat-classes.zip"
+# Started analysis 78 with job id 414a68aa-3b86-4ec2-9118-677f34471a8f
+...
+```
+
+The `-g` (or `--include-git-source`) flag can be used to include a git-source associated with the project. 
+The `--git-branch-name <GIT BRANCH NAME>` option can be used to specify a target Git branch for the analysis. 
+In this example, the `include-git-source` flag is set (via `-g`) and the target git branch is "bugfix".
+```text
+codedx> analyze -n "Hello Analysis" 5;branchId=7 -g --git-branch-name "bugfix" "/path/to/workspace/webgoat-source.zip" "/path/to/workspace/webgoat-classes.zip"
+# Requesting new analysis with job id 2fcc373d-f63f-46c5-8d9a-13eaccf0c70b with included git source
+...
+# Started analysis 79 with job id fa0bbad5-ec13-4213-a437-41520f1d6b9c
+...
 ```
 
 # Command: `projects`
@@ -165,7 +191,7 @@ projects [OPTIONS]
  - *if no options* - Prints a list of all Code Dx projects that you have at least read access to.
  - `-n, --name <PART OF NAME>` - If this flag is given, it adds search criteria such that matching
    projects include `<PART OF NAME>` in their name (case insensitive).
- - `-m, --metadata <FIELD> <VALUE>` - If this flag is given, it should be followed a key-value
+ - `-m, --metadata <FIELD> <VALUE>` - If this flag is given, it should be followed by a key-value
    pair related to the project's metadata. If given, it adds search criteria such that
    matching projects must have entries for the given metadata fields matching the respective
    given metadata values. To specify another key-value pair, use the `-m` flag again.
@@ -198,6 +224,34 @@ For regular (plain text entry) fields, you can just give part of the value for i
 ```text
 codedx> projects -m Owner jo -m Visibility high
 {"id":4,"name":"Yet another","parentId":3}
+```
+
+# Commands: `branches`
+The `branches` command helps you get a list of all Code Dx branches for a specified project.
+
+## Arguments and Options
+
+```text
+branches [OPTIONS]
+```
+
+- `-p, --project-id <PROJECT_ID>` - Specifies the project, by ID, to display a list of branches for.
+- `-n, --name <PART_OF_NAME>` - Displays only branches with names containing the given name value.
+
+## Examples
+
+```text
+codedx> branches -p 1
+{"id":1,"name":"main","projectId":1,"isDefault":true}
+{"id":2,"name":"another branch","projectId":1,"isDefault":false}
+{"id":7,"name":"yet another branch","projectId":1,"isDefault":false}
+...
+```
+
+```text
+codedx> branches -p 1 -n another
+{"id":2,"name":"another branch","projectId":1,"isDefault":false}
+{"id":7,"name":"yet another branch","projectId":1,"isDefault":false}
 ```
 
 # Troubleshooting
