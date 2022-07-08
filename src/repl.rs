@@ -62,9 +62,9 @@ fn to_s(i: &[u8]) -> String {
     String::from_utf8_lossy(i).into_owned()
 }
 
-/// Function to parse a string surrounded by double-quotes.
-///
-/// Includes spaces, and allows for escape characters `\"`, `\'`, and `\\`.
+// Function to parse a string surrounded by double-quotes.
+//
+// Includes spaces, and allows for escape characters `\"`, `\'`, and `\\`.
 named!(dq_string <String>,
     delimited!(
         char!('"'),
@@ -82,9 +82,9 @@ named!(dq_string <String>,
     )
 );
 
-/// Function to parse a string surrounded by single-quotes.
-///
-/// Includes spaces, and allows for escape characters `\"`, `\'`, and `\\`.
+// Function to parse a string surrounded by single-quotes.
+//
+// Includes spaces, and allows for escape characters `\"`, `\'`, and `\\`.
 named!(sq_string <String>,
     delimited!(
         char!('\''),
@@ -102,7 +102,7 @@ named!(sq_string <String>,
     )
 );
 
-/// Function to parse a string from a series of consecutive non-whitespace characters.
+// Function to parse a string from a series of consecutive non-whitespace characters.
 named!(consecutive_string <String>,
     map!(
         is_not!(" \t"),

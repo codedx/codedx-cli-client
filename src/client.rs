@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+use branching::*;
 use config::ClientConfig;
 use hyper::{Method, StatusCode};
 use reqwest;
@@ -48,6 +49,26 @@ pub struct ApiProject {
     pub parent_id: Option<u32>,
 }
 
+/// Branch filter criteria used with `ApiClient::query_branches` to define project filter criteria.
+#[derive(Debug, Serialize)]
+pub struct ApiBranchFilter<'a> {
+    pub project_id: u32,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<&'a str>
+}
+
+/// A branch provided by the Code Dx API.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ApiBranch {
+    pub id: u32,
+    pub name: String,
+    #[serde(rename = "projectId")]
+    pub project_id: u32,
+    #[serde(rename = "isDefault")]
+    pub is_default: bool,
+}
+
 /// The response the server gives when you successfully start an analysis via the "stable" start-analysis endpoint.
 #[derive(Debug, Deserialize)]
 pub struct ApiAnalysisJobResponse {
@@ -57,9 +78,16 @@ pub struct ApiAnalysisJobResponse {
     pub job_id: String
 }
 
+/// The response the server gives when you successfully start an analysis via the "stable" start-analysis endpoint.
+#[derive(Debug, Deserialize)]
+pub struct ApiAnalysisWithGitSourceJobResponse {
+    #[serde(rename = "jobId")]
+    pub job_id: String
+}
+
 /// Enumeration representing the 5 possible statuses a Code Dx "job" may be in.
-#[serde(rename_all = "lowercase")]
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum JobStatus {
     Queued,
     Running,
@@ -276,6 +304,13 @@ impl ApiClient {
         }
     }
 
+    pub fn get_job_result(&self, job_id: &str) -> ApiResult<ApiAnalysisJobResponse> {
+        self.api_get(&["api", "jobs", job_id, "result"])
+            .expect_success()
+            .expect_json()
+
+    }
+
     pub fn get_projects(&self) -> ApiResult<Vec<ApiProject>> {
         self.api_get(&["x", "projects"])
             .expect_success()
@@ -288,24 +323,70 @@ impl ApiClient {
             .expect_json()
     }
 
-    pub fn start_analysis(&self, project_id: u32, files: Vec<&Path>) -> ApiResult<ApiAnalysisJobResponse> {
-        let form= files
+    pub fn get_branches_for_project(&self, project_id: u32) -> ApiResult<Vec<ApiBranch>> {
+        self.api_get(&["x", "projects", &project_id.to_string(), "branches"])
+            .expect_success()
+            .expect_json()
+    }
+
+    pub fn query_branches_for_project(&self, project_id: u32, branch_name: &str) -> ApiResult<Vec<ApiBranch>> {
+       self.get_branches_for_project(project_id).map(
+            |branches| branches.into_iter().filter(|branch| branch.name.contains(branch_name)).collect()
+        )
+    }
+
+    pub fn start_analysis(&self, project_context: ProjectContext, branch_name: Option<String>, files: Vec<&Path>) -> ApiResult<ApiAnalysisJobResponse> {
+        let branch_name_string = branch_name.unwrap_or_default();
+        let form = files
             .iter()
             .enumerate()
-            .fold(Ok(reqwest::multipart::Form::new()), |maybe_form, (index, file)| {
-                maybe_form.and_then(|form| form.file(format!("file{}", index), file))
+            .fold(Ok(reqwest::multipart::Form::new()),  move |maybe_form, (index, file)| {
+                maybe_form.and_then(|mut form| {
+                    if !branch_name_string.is_empty() {
+                        form = form.text("branchName", branch_name_string.clone())
+                    }
+                    form.file(format!("file{}", index), file)
+                })
             })
             .map_err(ApiError::from);
 
         form.and_then(|form| {
-            self.api_post(&["api", "projects", &project_id.to_string(), "analysis"], form)
+            self.api_post(&["api", "projects", &project_context.api_string, "analysis"], form)
                 .expect_success()
                 .expect_json::<ApiAnalysisJobResponse>()
         })
     }
 
-    pub fn set_analysis_name(&self, project_id: u32, analysis_id: u32, name: &str) -> ApiResult<()> {
-        self.api_put(&["x", "projects", &project_id.to_string(), "analyses", &analysis_id.to_string()], json!({ "name": name }))
+    pub fn start_analysis_with_git(&self, project_context: ProjectContext, branch_name: Option<String>, include_git_source: bool, git_branch_name: Option<String>, files: Vec<&Path>) -> ApiResult<ApiAnalysisWithGitSourceJobResponse> {
+        let branch_name_string = branch_name.unwrap_or_default();
+        let git_branch_name_string = git_branch_name.unwrap_or_default();
+
+        let form = files
+            .iter()
+            .enumerate()
+            .fold(Ok(reqwest::multipart::Form::new()), |maybe_form, (index, file)| {
+                maybe_form.and_then(|mut form| {
+                    if !branch_name_string.is_empty() {
+                        form = form.text("branchName", branch_name_string.clone())
+                    }
+                    if !git_branch_name_string.is_empty() {
+                        form = form.text("gitBranchName", git_branch_name_string.clone())
+                    }
+                    form = form.text("includeGitSource", include_git_source.to_string());
+                    form.file(format!("file{}", index), file)
+                })
+            })
+            .map_err(ApiError::from);
+
+        form.and_then(|form| {
+            self.api_post(&["api", "projects", &project_context.project_id.to_string(), "analysis"], form)
+                .expect_success()
+                .expect_json::<ApiAnalysisWithGitSourceJobResponse>()
+        })
+    }
+
+    pub fn set_analysis_name(&self, project_context: ProjectContext, analysis_id: u32, name: &str) -> ApiResult<()> {
+        self.api_put(&["x", "projects", &project_context.project_id.to_string(), "analyses", &analysis_id.to_string()], json!({ "name": name }))
             .expect_success()
             .get()
             .map(|_| ())
