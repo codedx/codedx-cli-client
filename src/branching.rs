@@ -13,7 +13,7 @@ impl <'a> BranchSpec {
                 id
                     .parse::<u32>()
                     .map_err(|_| "project-id should be a number")
-                    .and_then(|branch_id| Ok(BranchSpec::ByBranchId(branch_id)))
+                    .map(|branch_id| BranchSpec::ByBranchId(branch_id))
             } else { Err("branch-id cannot be empty") }
         } else if branch_spec_string.starts_with("branch=") {
             if let Some(("branch", name)) = branch_spec_string.split_once('=') {
