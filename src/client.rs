@@ -330,9 +330,13 @@ impl ApiClient {
     }
 
     pub fn query_branches_for_project(&self, project_id: u32, branch_name: &str) -> ApiResult<Vec<ApiBranch>> {
-       self.get_branches_for_project(project_id).map(
-            |branches| branches.into_iter().filter(|branch| branch.name.contains(branch_name)).collect()
-        )
+        let branch_name_lowercase = branch_name.to_lowercase();
+        self.get_branches_for_project(project_id).map(|branches| {
+            branches
+                .into_iter()
+                .filter(|branch| branch.name.to_lowercase().contains(&branch_name_lowercase))
+                .collect()
+        })
     }
 
     pub fn start_analysis(&self, project_context: ProjectContext, branch_name: Option<String>, files: Vec<&Path>) -> ApiResult<ApiAnalysisJobResponse> {
