@@ -5,7 +5,8 @@
 This is a utility intended to make it easier to interact with
 [Code Dx's REST API](https://codedx.com/Documentation/APIGuide.html) from the command line.
 
-Currently only a couple API actions are supported, but more may come with demand (or with pull requests!)
+Currently only a couple API actions are supported, but more may come with demand.
+Please reach out to https://community.synopsys.com/s/ for support and feature requests.
 
  - [Usage](#usage)
    - [`analyze`](#command-analyze)
