@@ -44,15 +44,15 @@ pub enum ClientAuth {
 }
 
 impl ClientAuth {
-    fn apply_to(&self, request_builder: &mut RequestBuilder) {
+    fn apply_to(&self, request_builder: RequestBuilder) -> RequestBuilder {
         match *self {
             ClientAuth::Basic { ref username, ref password } => {
                 let u: String = username.to_owned();
                 let p: String = password.to_owned();
-                request_builder.basic_auth(u, Some(p));
+                request_builder.basic_auth(u, Some(p))
             },
             ClientAuth::ApiKey(ref key) => {
-                request_builder.header(ApiKey(key.to_string()));
+                request_builder.header("API-Key", key.to_string())
             }
         }
     }
@@ -167,8 +167,8 @@ impl ClientConfig {
         })
     }
 
-    pub fn apply_auth(&self, request_builder: &mut RequestBuilder) {
-        self.auth_info.apply_to(request_builder);
+    pub fn apply_auth(&self, request_builder: RequestBuilder) -> RequestBuilder {
+        self.auth_info.apply_to(request_builder)
     }
 
     pub fn api_url(&self, segments: &[&str]) -> Url {
@@ -186,7 +186,4 @@ impl ClientConfig {
         url
     }
 
-    pub fn allows_insecure(&self) -> bool {
-        self.insecure
-    }
 }

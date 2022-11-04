@@ -16,8 +16,8 @@
 
 use branching::*;
 use config::ClientConfig;
-use hyper::{Method, StatusCode};
 use reqwest;
+use::reqwest::Method;
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 use serde_json;
@@ -140,7 +140,7 @@ pub enum ApiError {
     /// Additionally holds the error response, which will be an `ApiErrorMessage::Nice`
     /// for most expected error cases, but may sometimes be an `ApiErrorMessage::Raw`,
     /// typically for 5xx internal error responses.
-    NonSuccess(StatusCode, ApiErrorMessage),
+    NonSuccess(reqwest::StatusCode, ApiErrorMessage),
 
     /// Covers some I/O error cases like when the server's response body couldn't be read to a String,
     /// and when a file couldn't be added to a multipart form body.
@@ -251,11 +251,11 @@ pub struct ApiClient {
 
 impl ApiClient {
     pub fn new(config: Box<ClientConfig>) -> ApiClient {
-        let mut client_builder = reqwest::Client::builder();
+        let client_builder = reqwest::Client::builder();
         // the --insecure CLI flag enables this, to disable the CN name check
-        if config.allows_insecure() {
-            client_builder.danger_disable_hostname_verification();
-        }
+        // if config.allows_insecure() {
+        //     client_builder.danger_accept_invalid_certs(true);
+        // }
         let client = client_builder.build().unwrap();
         ApiClient { config, client }
     }
@@ -397,37 +397,36 @@ impl ApiClient {
     }
 
     pub fn api_get(&self, path_segments: &[&str]) -> ApiResponse {
-        self.api_request(Method::Get, path_segments, ReqBody::None)
+        self.api_request(Method::GET, path_segments, ReqBody::None)
     }
 
     pub fn api_post<B>(&self, path_segments: &[&str], body: B) -> ApiResponse
         where B: Into<ReqBody>
     {
-        self.api_request(Method::Post, path_segments, body)
+        self.api_request(Method::POST, path_segments, body)
     }
 
     pub fn api_put<B>(&self, path_segments: &[&str], body: B) -> ApiResponse
         where B: Into<ReqBody>
     {
-        self.api_request(Method::Put, path_segments, body)
+        self.api_request(Method::PUT, path_segments, body)
     }
 
     pub fn api_request<B>(&self, method: Method, path_segments: &[&str], body: B) -> ApiResponse
         where B: Into<ReqBody>
     {
         let url = self.config.api_url(path_segments);
-        let mut request_builder = self.client.request(method, url);
-        self.config.apply_auth(&mut request_builder);
+        let request_builder = self.client.request(method, url);
+        let configured_rb = self.config.apply_auth(request_builder);
         match body.into() {
             ReqBody::Json(ref json) => {
-                request_builder.json(json);
+                ApiResponse::from(configured_rb.json(json).send().map_err(ApiError::from))
             },
             ReqBody::Form(form) => {
-                request_builder.multipart(form);
-            }
-            ReqBody::None => (),
-        };
-        ApiResponse::from(request_builder.send().map_err(ApiError::from))
+                ApiResponse::from(configured_rb.multipart(form).send().map_err(ApiError::from))
+            },
+            ReqBody::None => ApiResponse::from(configured_rb.send().map_err(ApiError::from))
+        }
     }
 }
 
