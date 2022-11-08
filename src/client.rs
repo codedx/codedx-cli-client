@@ -24,7 +24,6 @@ use serde_json;
 use std;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::io::Read;
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
@@ -163,9 +162,8 @@ pub enum ApiErrorMessage {
     Raw(String)
 }
 impl ApiErrorMessage {
-    fn from_body(response: &mut reqwest::Response) -> Result<ApiErrorMessage, ApiError> {
-        let mut body = String::new();
-        response.read_to_string(&mut body).map_err(ApiError::from).and_then(|_|{
+    fn from_body(response: reqwest::blocking::Response) -> Result<ApiErrorMessage, ApiError> {
+        response.text().map_err(ApiError::from).and_then(|body|{
             serde_json::from_str::<ErrorMessageResponse>(&body)
                 .map(|err_body| ApiErrorMessage::Nice(err_body.error))
                 .or_else(|_| Ok(ApiErrorMessage::Raw(body)))
@@ -214,30 +212,31 @@ pub type ApiResult<T> = Result<T, ApiError>;
 ///     .expect_success()
 ///     .expect_json();
 /// ```
-pub struct ApiResponse(ApiResult<reqwest::Response>);
+pub struct ApiResponse(ApiResult<reqwest::blocking::Response>);
 impl ApiResponse {
-    pub fn from(r: ApiResult<reqwest::Response>) -> ApiResponse {
+    pub fn from(r: ApiResult<reqwest::blocking::Response>) -> ApiResponse {
         ApiResponse(r)
     }
 
-    pub fn get(self) -> ApiResult<reqwest::Response> {
+    pub fn get(self) -> ApiResult<reqwest::blocking::Response> {
         self.0
     }
 
     pub fn expect_success(self) -> ApiResponse {
-        ApiResponse(self.0.and_then(move |mut response| {
-            if response.status().is_success() {
+        ApiResponse(self.0.and_then(move |response| {
+            let status = response.status();
+            if status.is_success() {
                 Ok(response)
             } else {
-                ApiErrorMessage::from_body(&mut response).and_then(|response_msg| {
-                    Err(ApiError::NonSuccess(response.status(), response_msg))
+                ApiErrorMessage::from_body(response).and_then(|response_msg| {
+                    Err(ApiError::NonSuccess(status, response_msg))
                 })
             }
         }))
     }
 
     pub fn expect_json<T: DeserializeOwned>(self) -> ApiResult<T> {
-        self.0.and_then(|mut response| {
+        self.0.and_then(|response| {
             response.json().map_err(ApiError::from)
         })
     }
@@ -246,16 +245,18 @@ impl ApiResponse {
 /// Main entry point for interacting with the Code Dx REST API.
 pub struct ApiClient {
     config: Box<ClientConfig>,
-    client: reqwest::Client
+    client: reqwest::blocking::Client
 }
 
 impl ApiClient {
     pub fn new(config: Box<ClientConfig>) -> ApiClient {
-        let client_builder = reqwest::Client::builder();
-        // the --insecure CLI flag enables this, to disable the CN name check
-        // if config.allows_insecure() {
-        //     client_builder.danger_accept_invalid_certs(true);
-        // }
+        let client_builder = reqwest::blocking::Client::builder();
+        // the --insecure CLI flag enables this, to disable TLS hostname verification
+        let client_builder = if config.allows_insecure() {
+            client_builder.danger_accept_invalid_hostnames(true)
+        } else {
+            client_builder
+        };
         let client = client_builder.build().unwrap();
         ApiClient { config, client }
     }
@@ -344,7 +345,7 @@ impl ApiClient {
         let form = files
             .iter()
             .enumerate()
-            .fold(Ok(reqwest::multipart::Form::new()),  move |maybe_form, (index, file)| {
+            .fold(Ok(reqwest::blocking::multipart::Form::new()),  move |maybe_form, (index, file)| {
                 maybe_form.and_then(|mut form| {
                     if !branch_name_string.is_empty() {
                         form = form.text("branchName", branch_name_string.clone())
@@ -368,7 +369,7 @@ impl ApiClient {
         let form = files
             .iter()
             .enumerate()
-            .fold(Ok(reqwest::multipart::Form::new()), |maybe_form, (index, file)| {
+            .fold(Ok(reqwest::blocking::multipart::Form::new()), |maybe_form, (index, file)| {
                 maybe_form.and_then(|mut form| {
                     if !branch_name_string.is_empty() {
                         form = form.text("branchName", branch_name_string.clone())
@@ -433,7 +434,7 @@ impl ApiClient {
 /// Collection of types that `ApiClient` knows how to use as a request body.
 pub enum ReqBody {
     /// A multipart form, typically used for file uploads.
-    Form(reqwest::multipart::Form),
+    Form(reqwest::blocking::multipart::Form),
     /// A JSON object as the body
     Json(serde_json::Value),
     /// No body
@@ -450,8 +451,8 @@ impl From<serde_json::Value> for ReqBody {
         ReqBody::Json(json)
     }
 }
-impl From<reqwest::multipart::Form> for ReqBody {
-    fn from(form: reqwest::multipart::Form) -> ReqBody {
+impl From<reqwest::blocking::multipart::Form> for ReqBody {
+    fn from(form: reqwest::blocking::multipart::Form) -> ReqBody {
         ReqBody::Form(form)
     }
 }

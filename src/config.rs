@@ -195,4 +195,7 @@ impl ClientConfig {
         url
     }
 
+    pub fn allows_insecure(&self) -> bool {
+        self.insecure
+    }
 }
