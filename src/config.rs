@@ -16,12 +16,11 @@
 
 extern crate clap;
 extern crate reqwest;
-extern crate url;
 
 use clap::{Arg, ArgMatches, App};
-use reqwest::{RequestBuilder};
+use reqwest::blocking::{RequestBuilder};
+use reqwest::Url;
 use rpassword;
-use url::Url;
 
 /// Connection information for Code Dx.
 #[derive(Debug)]
@@ -44,15 +43,15 @@ pub enum ClientAuth {
 }
 
 impl ClientAuth {
-    fn apply_to(&self, request_builder: &mut RequestBuilder) {
+    fn apply_to(&self, request_builder: RequestBuilder) -> RequestBuilder {
         match *self {
             ClientAuth::Basic { ref username, ref password } => {
                 let u: String = username.to_owned();
                 let p: String = password.to_owned();
-                request_builder.basic_auth(u, Some(p));
+                request_builder.basic_auth(u, Some(p))
             },
             ClientAuth::ApiKey(ref key) => {
-                request_builder.header(ApiKey(key.to_string()));
+                request_builder.header("API-Key", key.to_string())
             }
         }
     }
@@ -103,7 +102,16 @@ pub fn get_base_app<'a, 'b>() -> App<'a, 'b> {
         .arg(Arg::with_name("insecure")
             .long("insecure")
             .takes_value(false)
-            .help("Ignore https certificate hostname validation")
+            .help("Disables TLS certificate validation for HTTPS")
+            .long_help(concat!(
+                "This option allows HTTPS connections to succeed and operate\n",
+                "for servers that would otherwise fail TLS verification.\n",
+                "This includes certificates with mismatched names and\n",
+                "certificates with no established chain of trust.\n",
+                "\n",
+                "WARNING: this makes the connection insecure and vulnerable\n",
+                "to things such as man-in-the-middle attacks.",
+            ))
         )
         .arg(Arg::with_name("no-prompt")
             .long("no-prompt")
@@ -167,8 +175,8 @@ impl ClientConfig {
         })
     }
 
-    pub fn apply_auth(&self, request_builder: &mut RequestBuilder) {
-        self.auth_info.apply_to(request_builder);
+    pub fn apply_auth(&self, request_builder: RequestBuilder) -> RequestBuilder {
+        self.auth_info.apply_to(request_builder)
     }
 
     pub fn api_url(&self, segments: &[&str]) -> Url {
