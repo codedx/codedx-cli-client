@@ -35,9 +35,9 @@ use clap::{ArgMatches, App, AppSettings};
 use std::io;
 use std::io::Write;
 
-use config::*;
-use client::*;
-use repl::CmdArgs;
+use crate::config::*;
+use crate::client::*;
+use crate::repl::CmdArgs;
 
 fn main(){
     let app = {

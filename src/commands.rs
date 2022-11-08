@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-use branching::*;
+use crate::branching::*;
 use clap::{ArgMatches, App, Arg, SubCommand};
-use client::*;
+use crate::client::*;
 use serde_json;
 use std::collections::HashMap;
 use std::path::Path;

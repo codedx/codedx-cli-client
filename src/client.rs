@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-use branching::*;
-use config::ClientConfig;
+use crate::branching::*;
+use crate::config::ClientConfig;
 use reqwest;
 use::reqwest::Method;
 use serde::de::DeserializeOwned;
