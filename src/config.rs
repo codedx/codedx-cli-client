@@ -16,7 +16,6 @@
 
 extern crate clap;
 extern crate reqwest;
-extern crate url;
 
 use clap::{Arg, ArgMatches, App};
 use reqwest::blocking::{RequestBuilder};
