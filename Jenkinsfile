@@ -14,7 +14,7 @@ pipeline {
 	stages {
 		stage('Check and Build') {
 			steps {
-				withCache(name: 'rust-cargo-cache', baseFolder: '$HOME', contents: '.cargo') {
+				withCache(name: 'rust-cargo-cache', baseFolder: '$HOME/.cargo', contents: 'registry') {
 					sh "cargo check"
 
 					sh "cargo build --release --target=x86_64-unknown-linux-musl"
