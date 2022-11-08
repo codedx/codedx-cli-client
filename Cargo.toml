@@ -1,7 +1,7 @@
 [package]
 name = "codedx-client"
 version = "0.2.0"
-authors = ["Dylan Halperin <dylan@dylemma.io>"]
+authors = ["Dylan Halperin <dylan.halperin@synopsys.com>"]
 edition = "2021"
 
 [dependencies]
