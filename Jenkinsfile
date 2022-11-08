@@ -30,7 +30,7 @@ pipeline {
 
 				failure {
 					script {
-						slack.error "codedx-cli-client build failed (<${env.BUILD_URL}|Open>)\n[${scmVars.GIT_BRANCH - 'origin/'}: ${scmVars.GIT_COMMIT}]"
+						slack.error "codedx-cli-client build failed (<${env.BUILD_URL}|Open>)\n[${env.GIT_BRANCH - 'origin/'}: ${env.GIT_COMMIT}]"
 					}
 				}
 			}
