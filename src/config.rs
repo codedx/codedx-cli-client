@@ -19,9 +19,9 @@ extern crate reqwest;
 extern crate url;
 
 use clap::{Arg, ArgMatches, App};
-use reqwest::{RequestBuilder};
+use reqwest::blocking::{RequestBuilder};
+use reqwest::Url;
 use rpassword;
-use url::Url;
 
 /// Connection information for Code Dx.
 #[derive(Debug)]
@@ -103,7 +103,16 @@ pub fn get_base_app<'a, 'b>() -> App<'a, 'b> {
         .arg(Arg::with_name("insecure")
             .long("insecure")
             .takes_value(false)
-            .help("Ignore https certificate hostname validation")
+            .help("Disables TLS certificate validation for HTTPS")
+            .long_help(concat!(
+                "This option allows HTTPS connections to succeed and operate\n",
+                "for servers that would otherwise fail TLS verification.\n",
+                "This includes certificates with mismatched names and\n",
+                "certificates with no established chain of trust.\n",
+                "\n",
+                "WARNING: this makes the connection insecure and vulnerable\n",
+                "to things such as man-in-the-middle attacks.",
+            ))
         )
         .arg(Arg::with_name("no-prompt")
             .long("no-prompt")
