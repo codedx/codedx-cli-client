@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 clap = "2.34" # version 3/4 require changes
 nom = "6.2" # nom 7.0+ remove the macro compatibility layer
-rpassword = "2.0.0" # 7.1
+rpassword = "7.0"
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"

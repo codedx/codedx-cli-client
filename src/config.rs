@@ -149,7 +149,7 @@ impl ClientConfig {
                     let foo = username.and_then(|u| {
                         password.or_else(|| {
                             // prompt for the password without actually showing what the user types
-                            rpassword::prompt_password_stdout("password: ").ok()
+                            rpassword::prompt_password("password: ").ok()
                         }).map(|p| {
                             ClientAuth::Basic{ username: u, password: p }
                         })
