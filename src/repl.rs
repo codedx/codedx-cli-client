@@ -37,8 +37,8 @@ impl FromStr for CmdArgs {
     type Err = ();
 
     fn from_str(s: &str) -> Result<CmdArgs, ()> {
-        arg_list(s.as_ref()).to_result()
-            .map(|v| CmdArgs(v))
+        arg_list(s.as_ref())
+            .map(|v| CmdArgs(v.1))
             .map_err(|_| ())
     }
 }
@@ -112,7 +112,7 @@ named!(consecutive_string <String>,
 
 named!(one_arg <String>, alt!(dq_string | sq_string | consecutive_string));
 
-named!(arg_list<Vec<String>>, separated_list!(is_a!(" \t"), one_arg));
+named!(arg_list<Vec<String>>, separated_list0!(is_a!(" \t"), one_arg));
 
 #[cfg(test)]
 fn test_parse(s: &str) -> Result<Vec<String>, ::nom::Err<&[u8]>> {

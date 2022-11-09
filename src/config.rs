@@ -31,9 +31,6 @@ pub struct ClientConfig {
     pub no_prompt: bool
 }
 
-// declares the `ApiKey` type which implements the Header trait
-header!{ (ApiKey, "API-Key") => [String] }
-
 /// Authentication credentials for connecting to Code Dx.
 /// Both "basic auth" (username + password) and "api key" are supported.
 #[derive(Debug)]

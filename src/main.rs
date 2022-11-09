@@ -19,7 +19,6 @@ extern crate rpassword;
 extern crate serde;
 
 #[macro_use] extern crate clap;
-#[macro_use] extern crate hyper;
 #[macro_use] extern crate nom;
 #[macro_use] extern crate serde_json;
 #[macro_use] extern crate serde_derive;

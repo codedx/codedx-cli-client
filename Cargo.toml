@@ -5,9 +5,8 @@ authors = ["Dylan Halperin <dylan.halperin@synopsys.com>"]
 edition = "2021"
 
 [dependencies]
-clap = "2.26.2"
-colored = "1.5.3"
-hyper = "0.14"
+clap = "2.34" # version 3/4 require changes
+nom = "6.2" # nom 7.0+ remove the macro compatibility layer
 rpassword = "2.0.0" # 7.1
 serde = "1.0"
 serde_json = "1.0"
@@ -17,7 +16,3 @@ serde_derive = "1.0"
 # that we build our own copy to statically link in rather than depending on what's installed in the
 # build VM
 reqwest = { version = "0.11", features = ["blocking", "json", "multipart", "native-tls-vendored"] }
-
-[dependencies.nom]
-version = "3.2"
-features = ["verbose-errors"]
