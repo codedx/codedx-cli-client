@@ -31,9 +31,6 @@ pub struct ClientConfig {
     pub no_prompt: bool
 }
 
-// declares the `ApiKey` type which implements the Header trait
-header!{ (ApiKey, "API-Key") => [String] }
-
 /// Authentication credentials for connecting to Code Dx.
 /// Both "basic auth" (username + password) and "api key" are supported.
 #[derive(Debug)]
@@ -152,7 +149,7 @@ impl ClientConfig {
                     let foo = username.and_then(|u| {
                         password.or_else(|| {
                             // prompt for the password without actually showing what the user types
-                            rpassword::prompt_password_stdout("password: ").ok()
+                            rpassword::prompt_password("password: ").ok()
                         }).map(|p| {
                             ClientAuth::Basic{ username: u, password: p }
                         })
