@@ -1,7 +1,3 @@
-[![Build status](https://ci.appveyor.com/api/projects/status/bvfw8fsuy2tt27tl?svg=true)](https://ci.appveyor.com/project/dylemma/codedx-cli-client)
-[![Build status](https://api.travis-ci.org/codedx/codedx-cli-client.svg?branch=master)](https://travis-ci.org/codedx/codedx-cli-client)
-
-
 This is a utility intended to make it easier to interact with
 [Code Dx's REST API](https://codedx.com/Documentation/APIGuide.html) from the command line.
 
