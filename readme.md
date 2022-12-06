@@ -37,7 +37,7 @@ codedx>
 ```
 
 ```text
-$> ./codedx-client https://localhost/codedx --api-key 8e218b38-fcdd-453d-8f78-185f7d1d9fa7
+$> ./codedx-client https://localhost/codedx --api-key api-key:XRLqjOCMbo1LTzBK6geIKW4GaPTAs87DIAtxkpGd
 Welcome to the Code Dx CLI Client REPL.
 codedx>
 ```
@@ -68,7 +68,7 @@ where each line of the file is interpreted as a command.
 If you wish to do this, you may also want to use the `--no-prompt` flag to prevent the program from writing stuff like "codedx>" to `STDOUT`.
 
 ```text
-$> ./codedx-client https://localhost/codedx --api-key 8e218b38-fcdd-453d-8f78-185f7d1d9fa7 --no-prompt < ./my-commands.txt
+$> ./codedx-client https://localhost/codedx --api-key api-key:XRLqjOCMbo1LTzBK6geIKW4GaPTAs87DIAtxkpGd --no-prompt < ./my-commands.txt
 ```
 
 ## About REPL Mode
