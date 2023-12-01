@@ -47,7 +47,6 @@ pipeline {
 				failure {
 					script {
 						github.setBuildStatus('codedx/codedx-cli-client', env.GIT_COMMIT, 'package/jenkins/build.codedx.io', 'failed', 'Build failed')
-						slack.error "codedx-cli-client build failed (<${env.BUILD_URL}|Open>)\n[${env.GIT_BRANCH - 'origin/'}: ${env.GIT_COMMIT}]"
 					}
 				}
 			}
