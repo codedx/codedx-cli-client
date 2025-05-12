@@ -168,7 +168,7 @@ The `-g` (or `--include-git-source`) flag can be used to include a git-source as
 The `--git-branch-name <GIT BRANCH NAME>` option can be used to specify a target Git branch for the analysis. 
 In this example, the `include-git-source` flag is set (via `-g`) and the target git branch is "bugfix".
 ```text
-codedx> analyze -n "Hello Analysis" 5;branchId=7 -g --git-branch-name "bugfix" "/path/to/workspace/webgoat-source.zip" "/path/to/workspace/webgoat-classes.zip"
+codedx> analyze -n "Hello Analysis" 5;branchId=7 -g --git-branch-name "bugfix"
 # Requesting new analysis with job id 2fcc373d-f63f-46c5-8d9a-13eaccf0c70b with included git source
 ...
 # Started analysis 79 with job id fa0bbad5-ec13-4213-a437-41520f1d6b9c
